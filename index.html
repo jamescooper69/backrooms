@@ -1,0 +1,3532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BACKROOMS</title>
+<style>
+  :root {
+    --bg: #0b0b09;
+    --panel: rgba(14, 14, 11, 0.92);
+    --border: rgba(212, 197, 116, 0.22);
+    --accent: #d8c86a;
+    --text: #eceadc;
+    --muted: #8f8c7a;
+    --danger: #e06c60;
+  }
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', Courier, monospace, system-ui;
+  }
+  canvas#game-canvas {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    display: block; z-index: 1;
+  }
+
+  /* ==================== MAIN MENU ==================== */
+  #main-menu {
+    position: fixed; inset: 0; z-index: 20;
+    display: flex; align-items: stretch; justify-content: flex-start;
+    background: radial-gradient(circle at 25% 40%, rgba(36, 33, 18, 0.86), rgba(8, 8, 6, 0.97));
+    padding: 48px 64px;
+    gap: 56px;
+  }
+  .menu-left {
+    width: 280px; display: flex; flex-direction: column;
+    align-items: flex-start; justify-content: flex-start;
+    flex-shrink: 0;
+  }
+  .game-title {
+    font-size: 30px; font-weight: 700; letter-spacing: 5px;
+    color: var(--text); margin: 0 0 6px 0;
+    border-left: 3px solid var(--accent); padding-left: 12px;
+  }
+  .game-subtitle {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    margin: 0 0 28px 15px; text-transform: uppercase;
+  }
+  .file-warning {
+    background: rgba(224, 108, 96, 0.16);
+    border: 1px solid var(--danger);
+    color: #ffb8b0; padding: 10px 12px; font-size: 12px;
+    margin-bottom: 16px; width: 100%; line-height: 1.4;
+    display: none;
+  }
+  .name-box {
+    width: 100%; margin-bottom: 24px;
+  }
+  .name-box label {
+    display: block; font-size: 11px; letter-spacing: 1.5px;
+    color: var(--muted); margin-bottom: 6px; text-transform: uppercase;
+  }
+  .name-box input {
+    width: 100%; background: #050504; border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; padding: 11px 12px; font-size: 15px; font-weight: 700;
+    font-family: inherit; text-align: center; outline: none;
+    transition: border-color 0.15s; user-select: text; -webkit-user-select: text;
+  }
+  .name-box input:focus { border-color: var(--accent); }
+  .nav-stack {
+    display: flex; flex-direction: column; width: 100%; gap: 6px;
+  }
+  .nav-btn {
+    background: transparent; border: none; color: #c7c5b8;
+    font-family: inherit; font-size: 20px; font-weight: 700;
+    text-align: left; padding: 10px 14px; cursor: pointer;
+    position: relative; transition: color 0.15s, padding-left 0.15s, background 0.15s;
+    border-left: 2px solid transparent;
+  }
+  .nav-btn:hover, .nav-btn.active {
+    color: #fff; padding-left: 20px;
+    border-left: 2px solid var(--accent);
+    background: linear-gradient(90deg, rgba(216, 200, 106, 0.09), transparent);
+  }
+  .asset-status {
+    margin-top: auto; width: 100%; padding-top: 16px;
+    font-size: 11px; color: var(--muted); line-height: 1.4;
+  }
+  .asset-bar-wrap {
+    width: 100%; height: 3px; background: rgba(255,255,255,0.08);
+    margin-top: 6px; overflow: hidden;
+  }
+  .asset-bar-fill {
+    height: 100%; width: 0%; background: var(--accent);
+    transition: width 0.15s ease;
+  }
+  .asset-error {
+    color: var(--danger); margin-top: 6px; font-size: 11px;
+    user-select: text; -webkit-user-select: text;
+  }
+
+  /* ==================== MENU RIGHT PANELS ==================== */
+  .menu-right {
+    flex: 1; display: flex; align-items: center; justify-content: flex-start;
+    max-width: 540px;
+  }
+  .menu-panel {
+    width: 100%; background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    padding: 28px 32px; display: none;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+  }
+  .menu-panel.open { display: block; }
+  .panel-header {
+    font-size: 18px; font-weight: 700; letter-spacing: 2px;
+    margin: 0 0 6px 0; text-transform: uppercase; color: #fff;
+  }
+  .panel-sub {
+    font-size: 12px; color: var(--muted); margin: 0 0 20px 0;
+  }
+  .room-code-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 18px;
+  }
+  .room-code-label {
+    font-size: 11px; letter-spacing: 2px; color: var(--muted);
+    margin-bottom: 4px; text-transform: uppercase;
+  }
+  .room-code-val {
+    font-size: 34px; font-weight: 700; letter-spacing: 5px;
+    color: #fff; user-select: text; -webkit-user-select: text;
+  }
+  .btn-primary, .btn-secondary {
+    font-family: inherit; font-weight: 700; font-size: 13px;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 12px 20px; cursor: pointer; border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: #f0eee4; color: #0b0b09;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent); color: #000;
+  }
+  .btn-primary:disabled {
+    opacity: 0.35; cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: #141411; color: var(--text);
+    border-color: rgba(255,255,255,0.16);
+  }
+  .btn-secondary:hover {
+    border-color: var(--accent); color: #fff;
+  }
+  .roster-head {
+    display: flex; justify-content: space-between;
+    font-size: 11px; letter-spacing: 1.5px; color: var(--muted);
+    margin-bottom: 8px; text-transform: uppercase;
+  }
+  .roster-box {
+    border: 1px solid rgba(255,255,255,0.12);
+    background: #060605; min-height: 136px; padding: 12px 16px;
+    margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .roster-item {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; color: #fff;
+  }
+  .roster-badge {
+    font-size: 11px; color: var(--muted);
+  }
+  .roster-badge.ready { color: var(--accent); }
+  .panel-actions {
+    display: flex; gap: 12px; align-items: center; margin-top: 18px;
+  }
+  .panel-actions .btn-primary { flex: 1; }
+  .join-row {
+    display: flex; gap: 10px; margin-bottom: 14px;
+  }
+  .join-row input {
+    flex: 1; background: #060605; border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; padding: 12px 14px; font-size: 16px; font-family: inherit;
+    letter-spacing: 3px; text-transform: uppercase; outline: none;
+    user-select: text; -webkit-user-select: text;
+  }
+  .join-row input:focus { border-color: var(--accent); }
+  .status-msg {
+    min-height: 18px; font-size: 12px; color: var(--danger);
+    margin-bottom: 8px;
+  }
+  .status-msg.info { color: var(--accent); }
+
+  /* ==================== SETTINGS ==================== */
+  .setting-group {
+    margin-bottom: 16px;
+  }
+  .setting-label {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: var(--text); margin-bottom: 6px;
+  }
+  .setting-group input[type="range"] {
+    width: 100%; accent-color: var(--accent); cursor: pointer;
+  }
+  .setting-group select {
+    width: 100%; background: #060605; color: var(--text);
+    border: 1px solid rgba(255,255,255,0.2); padding: 9px 10px;
+    font-family: inherit; font-size: 12px; outline: none;
+  }
+  .mic-perm-note {
+    font-size: 11px; color: var(--muted); margin-top: 6px;
+  }
+
+  /* ==================== IN-GAME HUD ==================== */
+  #hud {
+    position: fixed; inset: 0; z-index: 5;
+    pointer-events: none; display: none;
+  }
+  #crosshair {
+    position: fixed; left: 50%; top: 50%;
+    width: 4px; height: 4px; margin-left: -2px; margin-top: -2px;
+    background: rgba(255, 255, 240, 0.75);
+    border-radius: 50%;
+    box-shadow: 0 0 3px rgba(0,0,0,0.8);
+  }
+  #hud-bottom-left {
+    position: fixed; left: 20px; bottom: 20px;
+    width: 340px; display: flex; flex-direction: column;
+    gap: 6px; pointer-events: none;
+  }
+  #left-game-log {
+    display: flex; flex-direction: column; gap: 4px;
+    margin-bottom: 4px;
+  }
+  .left-log-line {
+    font-size: 12px; color: var(--accent);
+    background: rgba(10, 10, 8, 0.72);
+    border-left: 2px solid var(--accent);
+    padding: 4px 8px; width: fit-content;
+    transition: opacity 0.5s ease;
+  }
+  #chat-messages {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .chat-line {
+    font-size: 13px; color: #f2f0e4;
+    background: rgba(8, 8, 6, 0.65);
+    padding: 4px 8px; border-radius: 2px;
+    word-break: break-word; width: fit-content; max-width: 100%;
+    transition: opacity 0.5s ease;
+  }
+  #chat-input {
+    width: 100%; background: rgba(10, 10, 8, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #fff; font-family: inherit; font-size: 13px;
+    padding: 7px 10px; outline: none; pointer-events: auto;
+  }
+  #chat-input::placeholder { color: rgba(236, 234, 220, 0.55); }
+  #chat-input:focus {
+    background: rgba(10, 10, 8, 0.88);
+    border-color: var(--accent);
+  }
+
+  /* Top-right mic button + vertical level bar */
+  #hud-top-right {
+    position: fixed; right: 20px; top: 20px;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: auto;
+  }
+  #mic-btn {
+    width: 38px; height: 38px;
+    background: rgba(12, 12, 9, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--text); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; transition: border-color 0.15s, color 0.15s;
+  }
+  #mic-btn:hover { border-color: var(--accent); }
+  #mic-btn.muted { color: var(--danger); border-color: rgba(224,108,96,0.45); }
+  #mic-level-wrap {
+    width: 7px; height: 38px;
+    background: rgba(12, 12, 9, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex; align-items: flex-end; padding: 1px;
+  }
+  #mic-level-bar {
+    width: 100%; height: 0%;
+    background: var(--accent);
+    transition: height 0.04s linear;
+  }
+
+  /* Optional ?debug=1 indicator */
+  #debug-box {
+    position: fixed; left: 16px; top: 16px;
+    background: rgba(0,0,0,0.7); color: var(--accent);
+    font-size: 11px; padding: 6px 10px; pointer-events: none;
+    display: none; white-space: pre; z-index: 6;
+  }
+
+  /* ==================== OVERLAYS ==================== */
+  #click-to-enter {
+    position: fixed; inset: 0; z-index: 15;
+    background: rgba(8, 8, 6, 0.86);
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; text-align: center;
+  }
+  #click-to-enter h2 {
+    font-size: 24px; letter-spacing: 3px; color: #fff;
+    margin: 0 0 10px 0; text-transform: uppercase;
+  }
+  #click-to-enter p {
+    font-size: 13px; color: var(--accent); margin: 0;
+  }
+
+  #esc-menu {
+    position: fixed; inset: 0; z-index: 14;
+    background: rgba(8, 8, 6, 0.82);
+    display: none; align-items: center; justify-content: center;
+  }
+  .esc-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+    padding: 28px 34px; width: 380px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* Host pause & host leave full-screen overlays (pointer-events: none for pause!) */
+  #host-pause-overlay {
+    position: fixed; inset: 0; z-index: 30;
+    background: rgba(6, 6, 4, 0.92);
+    display: none; align-items: center; justify-content: center;
+    text-align: center; pointer-events: none;
+    padding: 24px;
+  }
+  #host-pause-overlay .msg {
+    font-size: 20px; letter-spacing: 1.5px; color: var(--accent);
+    max-width: 600px; line-height: 1.5;
+  }
+
+  #host-left-overlay {
+    position: fixed; inset: 0; z-index: 35;
+    background: rgba(6, 6, 4, 0.96);
+    display: none; align-items: center; justify-content: center;
+    text-align: center; pointer-events: none;
+    padding: 24px;
+  }
+  #host-left-overlay .msg {
+    font-size: 20px; letter-spacing: 1.5px; color: var(--danger);
+    max-width: 600px; line-height: 1.5;
+  }
+</style>
+
+<!-- PeerJS 1.5.4 -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<!-- Pinned Three.js 0.160.0 + three-mesh-bvh 0.7.3 Import Map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.7.3/build/index.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<!-- ==================== MAIN MENU ==================== -->
+<div id="main-menu">
+  <div class="menu-left">
+    <h1 class="game-title">BACKROOMS</h1>
+    <div class="game-subtitle">Level 0 Co-op Exploration</div>
+
+    <div id="file-proto-warning" class="file-warning">
+      Run this from GitHub Pages or a local web server
+    </div>
+
+    <div class="name-box">
+      <label for="player-name-input">YOUR NAME:</label>
+      <input id="player-name-input" type="text" maxlength="10" placeholder="Enter your name" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="nav-stack">
+      <button class="nav-btn" data-panel="create">Create game</button>
+      <button class="nav-btn" data-panel="join">Join game</button>
+      <button class="nav-btn" data-panel="settings">Settings</button>
+      <button class="nav-btn" data-panel="credits">Credits</button>
+    </div>
+
+    <div class="asset-status">
+      <div id="asset-status-text">Preloading assets... 0%</div>
+      <div class="asset-bar-wrap"><div id="asset-bar-fill" class="asset-bar-fill"></div></div>
+      <div id="asset-error-text" class="asset-error"></div>
+    </div>
+  </div>
+
+  <div class="menu-right">
+    <!-- CREATE GAME PANEL -->
+    <div id="panel-create" class="menu-panel">
+      <div class="room-code-row">
+        <div>
+          <div class="room-code-label">ROOM CODE</div>
+          <div id="create-room-code" class="room-code-val">-----</div>
+        </div>
+        <button id="copy-code-btn" class="btn-primary">COPY</button>
+      </div>
+
+      <div class="roster-head">
+        <span>PLAYERS IN ROOM:</span>
+        <span>4 Players Max</span>
+      </div>
+      <div id="lobby-roster" class="roster-box"></div>
+      <div id="lobby-status-msg" class="status-msg info"></div>
+
+      <div class="panel-actions">
+        <button id="lobby-leave-btn" class="btn-secondary">BACK</button>
+        <button id="start-game-btn" class="btn-primary" disabled>START GAME</button>
+      </div>
+    </div>
+
+    <!-- JOIN GAME PANEL -->
+    <div id="panel-join" class="menu-panel">
+      <h2 class="panel-header">JOIN GAME / PARTY</h2>
+      <p class="panel-sub">Join an existing game or a party, provided by a friend</p>
+      <div class="join-row">
+        <input id="join-code-input" type="text" maxlength="5" placeholder="Room ID" autocomplete="off" spellcheck="false">
+        <button id="join-room-btn" class="btn-primary">JOIN GAME</button>
+      </div>
+      <div id="join-error-msg" class="status-msg"></div>
+      <div class="panel-actions">
+        <button class="btn-secondary panel-back-btn">BACK</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS PANEL (shared layout for Menu & Esc) -->
+    <div id="panel-settings" class="menu-panel">
+      <h2 class="panel-header">SETTINGS</h2>
+      <p class="panel-sub">Audio &amp; Voice Configuration</p>
+
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>Master volume</span>
+          <span id="lbl-master-vol">100%</span>
+        </div>
+        <input id="slider-master-vol" type="range" min="0" max="100" step="1" value="100">
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>My microphone volume</span>
+          <span id="lbl-my-mic-vol">100%</span>
+        </div>
+        <input id="slider-my-mic-vol" type="range" min="0" max="200" step="1" value="100">
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>Other players' microphone volume</span>
+          <span id="lbl-others-mic-vol">100%</span>
+        </div>
+        <input id="slider-others-mic-vol" type="range" min="0" max="200" step="1" value="100">
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label"><span>Select microphone</span></div>
+        <button id="enable-mic-btn" class="btn-primary" style="width:100%;margin-bottom:8px;">Enable microphone</button>
+        <select id="mic-select" style="display:none;"></select>
+        <div id="mic-perm-status" class="mic-perm-note"></div>
+      </div>
+
+      <div class="panel-actions">
+        <button id="settings-back-btn" class="btn-secondary">BACK</button>
+      </div>
+    </div>
+
+    <!-- CREDITS PANEL -->
+    <div id="panel-credits" class="menu-panel">
+      <h2 class="panel-header">CREDITS</h2>
+      <p style="font-size:18px;font-weight:700;margin:16px 0 10px 0;color:#fff;">Create: Placeholder</p>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 22px 0;">
+        Tech stack: Three.js, three-mesh-bvh, WebRTC (PeerJS), Web Audio API, vanilla JavaScript
+      </p>
+      <div class="panel-actions">
+        <button class="btn-secondary panel-back-btn">BACK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CLICK TO ENTER OVERLAY ==================== -->
+<div id="click-to-enter">
+  <h2>Click to enter the game</h2>
+  <p>WASD Move &middot; Shift Run &middot; Space Jump &middot; C Crouch &middot; Enter Chat &middot; Esc Menu</p>
+</div>
+
+<!-- ==================== IN-GAME ESC MENU ==================== -->
+<div id="esc-menu">
+  <div id="esc-main-card" class="esc-card">
+    <h2 class="panel-header" style="margin-bottom:8px;">PAUSED</h2>
+    <button id="esc-continue-btn" class="btn-primary">Continue</button>
+    <button id="esc-settings-btn" class="btn-secondary">Settings</button>
+  </div>
+</div>
+
+<!-- ==================== HOST PAUSE & LEAVE OVERLAYS ==================== -->
+<div id="host-pause-overlay">
+  <div class="msg">The host switched tabs. Please wait while the host comes back.</div>
+</div>
+<div id="host-left-overlay">
+  <div class="msg">The host left the game. Leaving to main menu.</div>
+</div>
+
+<!-- ==================== IN-GAME HUD ==================== -->
+<div id="hud">
+  <div id="crosshair"></div>
+
+  <div id="hud-bottom-left">
+    <div id="left-game-log"></div>
+    <div id="chat-messages"></div>
+    <input id="chat-input" type="text" maxlength="100" placeholder="Press Enter to chat" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div id="hud-top-right">
+    <button id="mic-btn" title="Toggle Microphone">
+      <svg id="mic-svg-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="2" width="6" height="11" rx="3"></rect>
+        <path d="M5 10a7 7 0 0 0 14 0"></path>
+        <line x1="12" y1="17" x2="12" y2="22"></line>
+        <line x1="8" y1="22" x2="16" y2="22"></line>
+      </svg>
+      <svg id="mic-svg-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+        <line x1="1" y1="1" x2="23" y2="23"></line>
+        <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path>
+        <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path>
+        <line x1="12" y1="19" x2="12" y2="23"></line>
+        <line x1="8" y1="23" x2="16" y2="23"></line>
+      </svg>
+    </button>
+    <div id="mic-level-wrap"><div id="mic-level-bar"></div></div>
+  </div>
+</div>
+
+<div id="debug-box"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshBVH, acceleratedRaycast } from 'three-mesh-bvh';
+
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+// ============================================================================
+// 1. CONSTANTS & CONFIGURATION (Assets, ICE Servers, Overrides, Movement)
+// ============================================================================
+const MAP_URL = encodeURI('backrooms-v2.glb');
+const MAP_URL_FALLBACK = 'backrooms-v2.glb';
+const CHAR_URL = 'hazmat-player-model.glb';
+
+const MENU_MUSIC_URL = 'Main-menu-music.mp3';
+const GAME_AMBIENCE_URL = 'Main-game-ambience.mp3';
+
+// Gameplay & Camcorder Toggles
+const ENABLE_JUMP = false; // Set to true anytime to re-enable jumping
+const CAM_FOV = 84;        // Slightly wider VHS camcorder FOV (default was 75)
+
+// Configurable WebRTC ICE servers (Google STUN by default; add TURN here for strict NATs)
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+];
+
+// Optional overrides for deterministic map scale and spawn point
+const MAP_SCALE_OVERRIDE = null;
+const SPAWN_OVERRIDE = null;
+
+// Movement & Jump Constants
+const WALK_SPEED = 2.0;
+const RUN_SPEED = 5.0;
+const CROUCH_SPEED = 1.2;
+const RUN_JUMP_HEIGHT = 1.00;
+const JUMP_FORWARD_MULT = 0.9;
+const WALK_JUMP_HEIGHT = RUN_JUMP_HEIGHT * 0.6;
+const STAND_JUMP_HEIGHT = 0.35;
+const CAPSULE_RADIUS = 0.28;
+const STAND_HEIGHT = 1.30; // <-- Change ONLY this number to resize the player (e.g. 1.45 to 1.65)
+const CROUCH_HEIGHT = STAND_HEIGHT * (1.20 / 1.80);
+const EYE_STAND = STAND_HEIGHT * (1.60 / 1.80);
+const EYE_CROUCH = STAND_HEIGHT * (1.00 / 1.80);
+const STEP_UP_MAX = 0.30;
+
+const DEBUG_ENABLED = new URLSearchParams(window.location.search).get('debug') === '1';
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+if (window.location.protocol === 'file:') {
+  $('file-proto-warning').style.display = 'block';
+}
+if (DEBUG_ENABLED) {
+  $('debug-box').style.display = 'block';
+}
+
+// ============================================================================
+// 2. ASSET PRELOADING & CACHE
+// ============================================================================
+const assetCache = {
+  loaded: false,
+  mapBuffer: null,
+  charBuffer: null,
+  charGltf: null,
+  mapTemplate: null // Processed map data (scale, bvh, collisionGeo, chunkData, ceilingPanels, spawn, spawnOffsets)
+};
+
+async function fetchWithProgress(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const total = parseInt(res.headers.get('content-length') || '0', 10);
+  if (!res.body) {
+    const buf = await res.arrayBuffer();
+    onProgress(buf.byteLength, buf.byteLength);
+    return buf;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress(loaded, total || loaded * 1.15);
+  }
+  const out = new Uint8Array(loaded);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out.buffer;
+}
+
+function parseGLB(buffer) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.parse(buffer, '', gltf => resolve(gltf), err => reject(err));
+  });
+}
+
+async function preloadAssets() {
+  if (assetCache.loaded) return;
+  let mapProg = 0, charProg = 0;
+  const updateUI = () => {
+    const pct = Math.min(99, Math.round(((mapProg + charProg) / 2) * 100));
+    $('asset-status-text').textContent = `Preloading assets... ${pct}%`;
+    $('asset-bar-fill').style.width = `${pct}%`;
+  };
+
+  let currentFile = 'backrooms v2.glb';
+  try {
+    const mapPromise = (async () => {
+      try {
+        return await fetchWithProgress(MAP_URL, (l, t) => { mapProg = t ? l / t : 0.5; updateUI(); });
+      } catch (e) {
+        currentFile = MAP_URL_FALLBACK;
+        return await fetchWithProgress(MAP_URL_FALLBACK, (l, t) => { mapProg = t ? l / t : 0.5; updateUI(); });
+      }
+    })();
+
+    const charPromise = (async () => {
+      return await fetchWithProgress(CHAR_URL, (l, t) => { charProg = t ? l / t : 0.5; updateUI(); });
+    })();
+
+    const [mapBuf, charBuf] = await Promise.all([mapPromise, charPromise]);
+    assetCache.mapBuffer = mapBuf;
+    assetCache.charBuffer = charBuf;
+
+    $('asset-status-text').textContent = 'Processing geometry & BVH...';
+    currentFile = 'hazmat-player-model.glb';
+    assetCache.charGltf = await parseGLB(charBuf);
+
+    currentFile = 'backrooms v2.glb';
+    const rawMapGltf = await parseGLB(mapBuf);
+    assetCache.mapTemplate = await buildMapTemplate(rawMapGltf);
+
+    assetCache.loaded = true;
+    $('asset-status-text').textContent = `Assets ready (${assetCache.mapTemplate.ceilingPanels.length} lights)`;
+    $('asset-bar-fill').style.width = '100%';
+    onLocalAssetsReady();
+  } catch (err) {
+    console.error('[ASSETS] Failed:', err);
+    $('asset-status-text').textContent = 'Asset load failed';
+    $('asset-error-text').textContent = `Failed to load "${currentFile}": check the exact filename (case-sensitive) and that it is in the same folder as index.html`;
+  }
+}
+
+// ============================================================================
+// 3. MAIN MENU, NAME VALIDATION & SETTINGS
+// ============================================================================
+const nameInput = $('player-name-input');
+const savedName = (localStorage.getItem('brm_name') || 'player').toLowerCase().replace(/[^a-z]/g, '').slice(0, 10) || 'player';
+nameInput.value = savedName;
+
+function sanitizeName(str) {
+  return (str || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 10);
+}
+
+nameInput.addEventListener('input', () => {
+  const clean = sanitizeName(nameInput.value);
+  if (nameInput.value !== clean) nameInput.value = clean;
+  if (clean.length >= 1) localStorage.setItem('brm_name', clean);
+});
+
+function getValidatedName() {
+  const clean = sanitizeName(nameInput.value);
+  nameInput.value = clean;
+  if (clean.length < 1 || clean.length > 10 || !/^[a-z]{1,10}$/.test(clean)) {
+    nameInput.focus();
+    return null;
+  }
+  localStorage.setItem('brm_name', clean);
+  return clean;
+}
+
+let settingsOpenedFromEsc = false;
+
+function openMenuPanel(panelName) {
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.panel === panelName);
+  });
+  document.querySelectorAll('.menu-panel').forEach(p => p.classList.remove('open'));
+  if (panelName) {
+    const el = $('panel-' + panelName);
+    if (el) el.classList.add('open');
+  }
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.panel;
+    if (target === 'create' || target === 'join') {
+      const name = getValidatedName();
+      if (!name) return;
+    }
+    settingsOpenedFromEsc = false;
+    openMenuPanel(target);
+    if (target === 'create') {
+      startHostingRoom();
+    }
+  });
+});
+
+document.querySelectorAll('.panel-back-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    openMenuPanel(null);
+  });
+});
+
+$('settings-back-btn').addEventListener('click', () => {
+  if (settingsOpenedFromEsc && gameState.inGame) {
+    $('main-menu').style.display = 'none';
+    $('esc-menu').style.display = 'flex';
+    settingsOpenedFromEsc = false;
+  } else {
+    openMenuPanel(null);
+  }
+});
+
+// Copy button with clipboard API + fallback
+$('copy-code-btn').addEventListener('click', async () => {
+  const code = netState.roomCode;
+  if (!code) return;
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = code;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  }
+  $('copy-code-btn').textContent = 'Copied!';
+  setTimeout(() => { $('copy-code-btn').textContent = 'COPY'; }, 1400);
+});
+
+// ============================================================================
+// 4. VOICE CHAT & WEB AUDIO SYSTEM
+// ============================================================================
+const audioSettings = {
+  masterVol: parseFloat(localStorage.getItem('brm_master_vol') ?? '1.0'),
+  myMicVol: parseFloat(localStorage.getItem('brm_my_mic_vol') ?? '1.0'),
+  othersMicVol: parseFloat(localStorage.getItem('brm_others_mic_vol') ?? '1.0'),
+  micDeviceId: localStorage.getItem('brm_mic_device') || ''
+};
+
+let audioCtx = null;
+let masterGainNode = null;
+let myMicGainNode = null;
+let localAnalyser = null;
+let localAnalyserData = new Uint8Array(64);
+let outboundDestination = null;
+let localRawMicStream = null;
+let localMicSourceNode = null;
+let micPermissionGranted = false;
+let isMicMuted = false;
+
+function ensureAudioContext() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AC();
+    masterGainNode = audioCtx.createGain();
+    masterGainNode.gain.value = audioSettings.masterVol;
+    masterGainNode.connect(audioCtx.destination);
+
+    myMicGainNode = audioCtx.createGain();
+    myMicGainNode.gain.value = audioSettings.myMicVol;
+
+    localAnalyser = audioCtx.createAnalyser();
+    localAnalyser.fftSize = 128;
+    localAnalyser.smoothingTimeConstant = 0.75;
+    localAnalyserData = new Uint8Array(localAnalyser.frequencyBinCount);
+
+    outboundDestination = audioCtx.createMediaStreamDestination();
+    // Silent keep-alive oscillator so outboundDestination always has an active audio track for PeerJS calls
+    const silentOsc = audioCtx.createOscillator();
+    const silentGain = audioCtx.createGain();
+    silentGain.gain.value = 0.00001;
+    silentOsc.connect(silentGain);
+    silentGain.connect(outboundDestination);
+    silentOsc.start();
+
+    myMicGainNode.connect(localAnalyser);
+    myMicGainNode.connect(outboundDestination);
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(() => {});
+  }
+  return audioCtx;
+}
+
+// Initialize Settings UI sliders
+// Looping Background Audio (Main Menu Music & In-Game Ambience)
+const menuMusic = new Audio(MENU_MUSIC_URL);
+menuMusic.loop = true;
+menuMusic.preload = 'auto';
+
+const gameAmbience = new Audio(GAME_AMBIENCE_URL);
+gameAmbience.loop = true;
+gameAmbience.preload = 'auto';
+
+const MENU_MUSIC_BASE_VOL = 0.45;
+const GAME_AMBIENCE_BASE_VOL = 0.55;
+
+function syncBackgroundAudioVolumes() {
+  menuMusic.volume = clamp(MENU_MUSIC_BASE_VOL * audioSettings.masterVol, 0, 1);
+  gameAmbience.volume = clamp(GAME_AMBIENCE_BASE_VOL * audioSettings.masterVol, 0, 1);
+}
+syncBackgroundAudioVolumes();
+
+function startMenuMusic() {
+  gameAmbience.pause();
+  gameAmbience.currentTime = 0;
+  syncBackgroundAudioVolumes();
+  menuMusic.play().catch(() => {});
+}
+
+function startGameAmbience() {
+  menuMusic.pause();
+  menuMusic.currentTime = 0;
+  syncBackgroundAudioVolumes();
+  gameAmbience.play().catch(() => {});
+}
+
+// Start menu music immediately (or on first click/key if browser blocks autoplay)
+startMenuMusic();
+const unlockAudioOnFirstGesture = () => {
+  if (!gameState.inGame && menuMusic.paused) {
+    menuMusic.play().catch(() => {});
+  } else if (gameState.inGame && gameAmbience.paused) {
+    gameAmbience.play().catch(() => {});
+  }
+};
+window.addEventListener('pointerdown', unlockAudioOnFirstGesture);
+window.addEventListener('keydown', unlockAudioOnFirstGesture);
+
+// Initialize Settings UI sliders
+function initSettingsUI() {
+  const mSlider = $('slider-master-vol');
+  const mySlider = $('slider-my-mic-vol');
+  const oSlider = $('slider-others-mic-vol');
+
+  mSlider.value = Math.round(audioSettings.masterVol * 100);
+  $('lbl-master-vol').textContent = `${mSlider.value}%`;
+
+  mySlider.value = Math.round(audioSettings.myMicVol * 100);
+  $('lbl-my-mic-vol').textContent = `${mySlider.value}%`;
+
+  oSlider.value = Math.round(audioSettings.othersMicVol * 100);
+  $('lbl-others-mic-vol').textContent = `${oSlider.value}%`;
+
+  mSlider.addEventListener('input', () => {
+    audioSettings.masterVol = parseInt(mSlider.value, 10) / 100;
+    $('lbl-master-vol').textContent = `${mSlider.value}%`;
+    localStorage.setItem('brm_master_vol', String(audioSettings.masterVol));
+    if (masterGainNode && audioCtx) {
+      masterGainNode.gain.setTargetAtTime(audioSettings.masterVol, audioCtx.currentTime, 0.02);
+    }
+    syncBackgroundAudioVolumes();
+  });
+
+  mySlider.addEventListener('input', () => {
+    audioSettings.myMicVol = parseInt(mySlider.value, 10) / 100;
+    $('lbl-my-mic-vol').textContent = `${mySlider.value}%`;
+    localStorage.setItem('brm_my_mic_vol', String(audioSettings.myMicVol));
+    if (myMicGainNode && audioCtx) {
+      myMicGainNode.gain.setValueAtTime(isMicMuted ? 0 : audioSettings.myMicVol, audioCtx.currentTime);
+    }
+  });
+
+  oSlider.addEventListener('input', () => {
+    audioSettings.othersMicVol = parseInt(oSlider.value, 10) / 100;
+    $('lbl-others-mic-vol').textContent = `${oSlider.value}%`;
+    localStorage.setItem('brm_others_mic_vol', String(audioSettings.othersMicVol));
+  });
+
+  $('enable-mic-btn').addEventListener('click', () => {
+    requestMicrophone(audioSettings.micDeviceId);
+  });
+
+  $('mic-select').addEventListener('change', e => {
+    audioSettings.micDeviceId = e.target.value;
+    localStorage.setItem('brm_mic_device', audioSettings.micDeviceId);
+    requestMicrophone(audioSettings.micDeviceId);
+  });
+}
+initSettingsUI();
+
+async function populateMicDropdown() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const mics = devices.filter(d => d.kind === 'audioinput');
+  const sel = $('mic-select');
+  sel.innerHTML = '';
+  mics.forEach((d, idx) => {
+    const opt = document.createElement('option');
+    opt.value = d.deviceId;
+    opt.textContent = d.label || `Microphone ${idx + 1}`;
+    sel.appendChild(opt);
+  });
+  if (mics.length > 0) {
+    const found = mics.find(m => m.deviceId === audioSettings.micDeviceId);
+    sel.value = found ? found.deviceId : mics[0].deviceId;
+    audioSettings.micDeviceId = sel.value;
+    sel.style.display = 'block';
+    $('enable-mic-btn').style.display = 'none';
+  }
+}
+
+async function requestMicrophone(preferredDeviceId = '') {
+  ensureAudioContext();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $('mic-perm-status').textContent = 'Microphone API unavailable in this browser.';
+    return false;
+  }
+  try {
+    const constraints = {
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        ...(preferredDeviceId ? { deviceId: { exact: preferredDeviceId } } : {})
+      }
+    };
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+
+    if (localRawMicStream) {
+      localRawMicStream.getTracks().forEach(t => t.stop());
+    }
+    if (localMicSourceNode) {
+      try { localMicSourceNode.disconnect(); } catch {}
+    }
+
+    localRawMicStream = stream;
+    micPermissionGranted = true;
+    isMicMuted = false;
+    updateMicHUDIcon();
+
+    localMicSourceNode = audioCtx.createMediaStreamSource(stream);
+    localMicSourceNode.connect(myMicGainNode);
+    myMicGainNode.gain.setValueAtTime(audioSettings.myMicVol, audioCtx.currentTime);
+
+    await populateMicDropdown();
+    $('mic-perm-status').textContent = 'Microphone active.';
+
+    // Swap processed outbound track into every active peer connection via RTCRtpSender.replaceTrack
+    const outTrack = outboundDestination.stream.getAudioTracks()[0];
+    if (outTrack) {
+      outTrack.enabled = !isMicMuted;
+      for (const peerObj of netState.peers.values()) {
+        if (peerObj.call && peerObj.call.peerConnection) {
+          const sender = peerObj.call.peerConnection.getSenders().find(s => s.track && s.track.kind === 'audio');
+          if (sender) {
+            sender.replaceTrack(outTrack).catch(() => {});
+          }
+        }
+      }
+    }
+    return true;
+  } catch (err) {
+    micPermissionGranted = false;
+    $('mic-perm-status').textContent = 'Microphone permission denied. Game works without voice.';
+    updateMicHUDIcon();
+    return false;
+  }
+}
+
+function setMicMuted(muted) {
+  isMicMuted = muted;
+  if (localRawMicStream) {
+    localRawMicStream.getAudioTracks().forEach(t => { t.enabled = !isMicMuted; });
+  }
+  if (outboundDestination) {
+    outboundDestination.stream.getAudioTracks().forEach(t => { t.enabled = !isMicMuted; });
+  }
+  if (myMicGainNode && audioCtx) {
+    myMicGainNode.gain.setTargetAtTime(isMicMuted ? 0 : audioSettings.myMicVol, audioCtx.currentTime, 0.015);
+  }
+  updateMicHUDIcon();
+}
+
+function updateMicHUDIcon() {
+  const muted = !micPermissionGranted || isMicMuted;
+  $('mic-btn').classList.toggle('muted', muted);
+  $('mic-svg-on').style.display = muted ? 'none' : 'block';
+  $('mic-svg-off').style.display = muted ? 'block' : 'none';
+  if (muted) $('mic-level-bar').style.height = '0%';
+}
+
+$('mic-btn').addEventListener('click', async e => {
+  e.stopPropagation();
+  if (!micPermissionGranted) {
+    await requestMicrophone(audioSettings.micDeviceId);
+  } else {
+    setMicMuted(!isMicMuted);
+  }
+});
+
+// Build 3D HRTF proximity audio pipeline for a remote peer stream
+function setupRemotePeerAudio(peerId, stream) {
+  ensureAudioContext();
+  const peerObj = netState.peers.get(peerId);
+  if (!peerObj) return;
+  disposeRemotePeerAudio(peerObj);
+
+  // Required by Chrome for WebRTC remote audio streams routed into Web Audio API
+  const audioEl = document.createElement('audio');
+  audioEl.srcObject = stream;
+  audioEl.muted = true;
+  audioEl.autoplay = true;
+  audioEl.playsInline = true;
+  audioEl.play().catch(() => {});
+
+  const source = audioCtx.createMediaStreamSource(stream);
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 64;
+  const analyserData = new Uint8Array(analyser.frequencyBinCount);
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 18000;
+
+  const panner = audioCtx.createPanner();
+  panner.panningModel = 'HRTF';
+  panner.distanceModel = 'linear';
+  panner.refDistance = 1;
+  panner.maxDistance = 10000;
+  panner.rolloffFactor = 0; // Manual distance falloff computation
+
+  source.connect(gain);
+  gain.connect(analyser);
+  analyser.connect(filter);
+  filter.connect(panner);
+  panner.connect(masterGainNode);
+
+  peerObj.audio = { audioEl, source, gain, analyser, analyserData, filter, panner };
+}
+
+function disposeRemotePeerAudio(peerObj) {
+  if (!peerObj || !peerObj.audio) return;
+  try {
+    peerObj.audio.source.disconnect();
+    peerObj.audio.gain.disconnect();
+    peerObj.audio.analyser.disconnect();
+    peerObj.audio.filter.disconnect();
+    peerObj.audio.panner.disconnect();
+    peerObj.audio.audioEl.srcObject = null;
+  } catch {}
+  peerObj.audio = null;
+}
+
+const _occRay = new THREE.Raycaster();
+_occRay.firstHitOnly = true;
+const _occDir = new THREE.Vector3();
+const _camForward = new THREE.Vector3();
+const _camUp = new THREE.Vector3();
+
+function updateVoiceChatFrame() {
+  if (!audioCtx) return;
+
+  // Update local mic level bar
+  if (micPermissionGranted && !isMicMuted && localAnalyser) {
+    localAnalyser.getByteFrequencyData(localAnalyserData);
+    let sum = 0;
+    for (let i = 0; i < localAnalyserData.length; i++) sum += localAnalyserData[i];
+    const avg = sum / localAnalyserData.length;
+    const pct = clamp((avg / 95) * 100, 0, 100);
+    $('mic-level-bar').style.height = `${pct.toFixed(1)}%`;
+  } else {
+    $('mic-level-bar').style.height = '0%';
+  }
+
+  if (!gameState.inGame || !camera) return;
+
+  // Update AudioListener from local camera
+  const listener = audioCtx.listener;
+  camera.getWorldDirection(_camForward);
+  _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+  const t = audioCtx.currentTime;
+  if (listener.positionX) {
+    listener.positionX.setValueAtTime(camera.position.x, t);
+    listener.positionY.setValueAtTime(camera.position.y, t);
+    listener.positionZ.setValueAtTime(camera.position.z, t);
+    listener.forwardX.setValueAtTime(_camForward.x, t);
+    listener.forwardY.setValueAtTime(_camForward.y, t);
+    listener.forwardZ.setValueAtTime(_camForward.z, t);
+    listener.upX.setValueAtTime(_camUp.x, t);
+    listener.upY.setValueAtTime(_camUp.y, t);
+    listener.upZ.setValueAtTime(_camUp.z, t);
+  } else {
+    listener.setPosition(camera.position.x, camera.position.y, camera.position.z);
+    listener.setOrientation(_camForward.x, _camForward.y, _camForward.z, _camUp.x, _camUp.y, _camUp.z);
+  }
+
+  // Update each remote player's 3D proximity gain & low-pass cutoff
+  for (const [peerId, rPlayer] of remotePlayers.entries()) {
+    const peerObj = netState.peers.get(peerId);
+    if (!peerObj || !peerObj.audio) continue;
+    const { gain, analyser, analyserData, filter, panner } = peerObj.audio;
+
+    const headX = rPlayer.pos.x;
+    const headY = rPlayer.pos.y + (rPlayer.crouch ? EYE_CROUCH : EYE_STAND);
+    const headZ = rPlayer.pos.z;
+
+    if (panner.positionX) {
+      panner.positionX.setValueAtTime(headX, t);
+      panner.positionY.setValueAtTime(headY, t);
+      panner.positionZ.setValueAtTime(headZ, t);
+    } else {
+      panner.setPosition(headX, headY, headZ);
+    }
+
+    const dx = headX - camera.position.x;
+    const dy = headY - camera.position.y;
+    const dz = headZ - camera.position.z;
+    const dist = Math.hypot(dx, dy, dz);
+
+    // Distance curve in meters: full within 2m, smooth falloff to 20m, faint tail to 32m, silence beyond
+    let distGain = 0;
+    if (dist <= 2.0) {
+      distGain = 1.0;
+    } else if (dist <= 20.0) {
+      const u = (dist - 2.0) / 18.0;
+      distGain = Math.pow(1.0 - u, 1.8) * 0.92 + 0.08 * (1.0 - u);
+    } else if (dist <= 32.0) {
+      const u = (dist - 20.0) / 12.0;
+      distGain = 0.08 * Math.pow(1.0 - u, 2.0);
+    } else {
+      distGain = 0.0;
+    }
+
+    let cutoff = dist <= 2.0 ? 18000 : dist >= 32.0 ? 350 : 18000 * Math.pow(350 / 18000, (dist - 2.0) / 30.0);
+
+    // BVH wall occlusion check between speakers
+    if (distGain > 0.001 && dist > 0.5 && gameState.bvhMesh) {
+      _occDir.set(dx, dy, dz).divideScalar(dist);
+      _occRay.set(camera.position, _occDir);
+      _occRay.near = 0.2;
+      _occRay.far = dist - 0.25;
+      const hit = gameState.bvhMesh.raycast ? _occRay.intersectObject(gameState.bvhMesh, false)[0] : null;
+      if (hit) {
+        distGain *= 0.5;
+        cutoff *= 0.5;
+      }
+    }
+
+    const finalPlayerGain = audioSettings.othersMicVol * distGain;
+    gain.gain.setTargetAtTime(finalPlayerGain, t, 0.03);
+    filter.frequency.setTargetAtTime(clamp(cutoff, 250, 18000), t, 0.03);
+
+    // Speaking highlight on nametag
+    analyser.getByteFrequencyData(analyserData);
+    let s = 0;
+    for (let i = 0; i < analyserData.length; i++) s += analyserData[i];
+    const speaking = (s / analyserData.length) > 14 && dist <= 32.0;
+    setRemoteNameTagSpeaking(rPlayer, speaking);
+  }
+}
+
+// ============================================================================
+// 5. NETWORKING (PeerJS 1.5.4 Full Mesh, Host Authority, Worker Heartbeat)
+// ============================================================================
+const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateRoomCode() {
+  let s = '';
+  for (let i = 0; i < 5; i++) {
+    s += ROOM_ALPHABET[Math.floor(Math.random() * ROOM_ALPHABET.length)];
+  }
+  return s;
+}
+
+const netState = {
+  peer: null,
+  myId: '',
+  myName: '',
+  isHost: false,
+  roomCode: '',
+  hostId: '',
+  roster: [], // [{ id, name, isHost, ready, spawnIndex }]
+  peers: new Map(), // peerId -> { relConn, unrelConn, call, audio }
+  gameStarted: false,
+  lastHostActiveHb: 0,
+  lastHostAnyMsg: 0,
+  hostPaused: false,
+  hostLeavingTriggered: false
+};
+
+// Web Worker 500ms timer so host heartbeats continue when tab is backgrounded
+const workerBlob = new Blob([`
+  let iv = null;
+  onmessage = e => {
+    if (e.data === 'start') {
+      if (iv) clearInterval(iv);
+      iv = setInterval(() => postMessage('tick'), 500);
+    } else if (e.data === 'stop') {
+      if (iv) clearInterval(iv);
+      iv = null;
+    }
+  };
+`], { type: 'application/javascript' });
+const heartbeatWorker = new Worker(URL.createObjectURL(workerBlob));
+
+heartbeatWorker.onmessage = () => {
+  if (!gameState.inGame) return;
+  const now = performance.now();
+  if (netState.isHost) {
+    broadcastReliable({ t: 'hb', paused: document.hidden });
+  } else {
+    // Client checks host heartbeat timeouts
+    if (now - netState.lastHostAnyMsg > 12000 && !netState.hostLeavingTriggered) {
+      triggerHostLeftSequence();
+    } else if (now - netState.lastHostActiveHb > 2500 && !netState.hostPaused) {
+      setHostPausedState(true);
+    }
+  }
+};
+
+function cleanupNetwork() {
+  heartbeatWorker.postMessage('stop');
+  for (const peerObj of netState.peers.values()) {
+    disposeRemotePeerAudio(peerObj);
+    try { peerObj.relConn?.close(); } catch {}
+    try { peerObj.unrelConn?.close(); } catch {}
+    try { peerObj.call?.close(); } catch {}
+  }
+  netState.peers.clear();
+  if (netState.peer) {
+    try { netState.peer.destroy(); } catch {}
+    netState.peer = null;
+  }
+  netState.roster = [];
+  netState.gameStarted = false;
+  netState.hostPaused = false;
+  netState.hostLeavingTriggered = false;
+}
+
+function getOrCreatePeerEntry(peerId) {
+  if (!netState.peers.has(peerId)) {
+    netState.peers.set(peerId, { relConn: null, unrelConn: null, call: null, audio: null });
+  }
+  return netState.peers.get(peerId);
+}
+
+function sendReliable(peerId, msg) {
+  const p = netState.peers.get(peerId);
+  if (p?.relConn?.open) {
+    try { p.relConn.send(msg); } catch {}
+  }
+}
+
+function broadcastReliable(msg, excludeId = null) {
+  for (const [peerId, p] of netState.peers.entries()) {
+    if (peerId !== excludeId && p.relConn?.open) {
+      try { p.relConn.send(msg); } catch {}
+    }
+  }
+}
+
+function broadcastUnreliable(msg) {
+  for (const p of netState.peers.values()) {
+    if (p.unrelConn?.open) {
+      try { p.unrelConn.send(msg); } catch {}
+    } else if (p.relConn?.open) {
+      try { p.relConn.send(msg); } catch {}
+    }
+  }
+}
+
+function onLocalAssetsReady() {
+  if (!netState.peer) return;
+  const me = netState.roster.find(r => r.id === netState.myId);
+  if (me) me.ready = true;
+  if (netState.isHost) {
+    broadcastRoster();
+    renderLobbyRoster();
+  } else if (netState.hostId) {
+    sendReliable(netState.hostId, { t: 'readyState', ready: true });
+  }
+}
+
+function renderLobbyRoster() {
+  const box = $('lobby-roster');
+  box.innerHTML = '';
+  for (const p of netState.roster) {
+    const row = document.createElement('div');
+    row.className = 'roster-item';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = p.name + (p.isHost ? ' (Host)' : '');
+    const readySpan = document.createElement('span');
+    readySpan.className = 'roster-badge' + (p.ready ? ' ready' : '');
+    readySpan.textContent = p.ready ? 'READY' : 'LOADING...';
+    row.appendChild(nameSpan);
+    row.appendChild(readySpan);
+    box.appendChild(row);
+  }
+
+  const startBtn = $('start-game-btn');
+  if (netState.isHost) {
+    startBtn.style.display = 'block';
+    const countOk = netState.roster.length >= 2 && netState.roster.length <= 4;
+    const allReady = netState.roster.every(p => p.ready);
+    startBtn.disabled = !(countOk && allReady && assetCache.loaded);
+    if (!allReady) {
+      $('lobby-status-msg').textContent = 'Waiting for all players to finish loading assets...';
+    } else if (netState.roster.length < 2) {
+      $('lobby-status-msg').textContent = 'Waiting for at least 1 more player to join (2-4 players)...';
+    } else {
+      $('lobby-status-msg').textContent = 'All players ready!';
+    }
+  } else {
+    startBtn.style.display = 'none';
+    $('lobby-status-msg').textContent = 'Waiting for host to start the game...';
+  }
+}
+
+function broadcastRoster() {
+  netState.roster.forEach((p, idx) => { p.spawnIndex = idx; });
+  broadcastReliable({ t: 'roster', roster: netState.roster });
+  renderLobbyRoster();
+}
+
+// Host Room Creation
+function startHostingRoom() {
+  cleanupNetwork();
+  const name = getValidatedName();
+  if (!name) return;
+  ensureAudioContext();
+
+  netState.myName = name;
+  netState.isHost = true;
+  netState.roomCode = generateRoomCode();
+  netState.myId = 'brm-' + netState.roomCode;
+  netState.hostId = netState.myId;
+  $('create-room-code').textContent = '.....';
+  $('lobby-status-msg').textContent = 'Opening room...';
+
+  const peer = new window.Peer(netState.myId, { config: { iceServers: ICE_SERVERS } });
+  netState.peer = peer;
+
+  peer.on('open', id => {
+    netState.myId = id;
+    $('create-room-code').textContent = netState.roomCode;
+    netState.roster = [{
+      id: netState.myId,
+      name: netState.myName,
+      isHost: true,
+      ready: assetCache.loaded,
+      spawnIndex: 0
+    }];
+    renderLobbyRoster();
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') {
+      // Retry on room code collision
+      startHostingRoom();
+    } else {
+      $('lobby-status-msg').textContent = 'Network error: ' + (err.type || 'Check connection');
+    }
+  });
+
+  setupCommonPeerListeners(peer);
+}
+
+// Client Join Room
+$('join-room-btn').addEventListener('click', () => {
+  const name = getValidatedName();
+  if (!name) return;
+  const code = ($('join-code-input').value || '').trim().toUpperCase();
+  if (code.length !== 5) {
+    $('join-error-msg').textContent = 'Room not found';
+    return;
+  }
+  joinExistingRoom(code, name);
+});
+
+function joinExistingRoom(code, name) {
+  cleanupNetwork();
+  ensureAudioContext();
+  $('join-error-msg').textContent = 'Connecting...';
+  $('join-error-msg').className = 'status-msg info';
+
+  netState.myName = name;
+  netState.isHost = false;
+  netState.roomCode = code;
+  netState.hostId = 'brm-' + code;
+
+  const clientSuffix = Math.random().toString(36).substring(2, 9);
+  const myPeerId = `brm-c-${clientSuffix}`;
+  const peer = new window.Peer(myPeerId, { config: { iceServers: ICE_SERVERS } });
+  netState.peer = peer;
+
+  let joinResolved = false;
+  const joinTimeout = setTimeout(() => {
+    if (!joinResolved) {
+      joinResolved = true;
+      $('join-error-msg').className = 'status-msg';
+      $('join-error-msg').textContent = 'Connection failed. Try again';
+      cleanupNetwork();
+    }
+  }, 8000);
+
+  peer.on('open', id => {
+    netState.myId = id;
+    const conn = peer.connect(netState.hostId, { label: 'rel', reliable: true });
+    const entry = getOrCreatePeerEntry(netState.hostId);
+    entry.relConn = conn;
+    setupDataConnection(conn, netState.hostId, true, reason => {
+      if (!joinResolved) {
+        joinResolved = true;
+        clearTimeout(joinTimeout);
+        $('join-error-msg').className = 'status-msg';
+        $('join-error-msg').textContent = reason;
+        cleanupNetwork();
+      }
+    }, () => {
+      if (!joinResolved) {
+        joinResolved = true;
+        clearTimeout(joinTimeout);
+        $('join-error-msg').textContent = '';
+        $('create-room-code').textContent = netState.roomCode;
+        openMenuPanel('create');
+      }
+    });
+  });
+
+  peer.on('error', err => {
+    if (!joinResolved) {
+      joinResolved = true;
+      clearTimeout(joinTimeout);
+      $('join-error-msg').className = 'status-msg';
+      if (err.type === 'peer-unavailable') {
+        $('join-error-msg').textContent = 'Room not found';
+      } else {
+        $('join-error-msg').textContent = 'Connection failed. Try again';
+      }
+      cleanupNetwork();
+    }
+  });
+
+  setupCommonPeerListeners(peer);
+}
+
+function setupCommonPeerListeners(peer) {
+  peer.on('connection', conn => {
+    const remoteId = conn.peer;
+    const entry = getOrCreatePeerEntry(remoteId);
+    if (conn.label === 'unrel') {
+      entry.unrelConn = conn;
+      setupUnreliableConnection(conn, remoteId);
+    } else {
+      entry.relConn = conn;
+      setupDataConnection(conn, remoteId, false);
+    }
+  });
+
+  peer.on('call', call => {
+    ensureAudioContext();
+    const remoteId = call.peer;
+    const entry = getOrCreatePeerEntry(remoteId);
+    entry.call = call;
+    call.answer(outboundDestination.stream);
+    call.on('stream', remoteStream => {
+      setupRemotePeerAudio(remoteId, remoteStream);
+    });
+  });
+}
+
+// Lexicographically smaller peer ID initiates client-to-client connections (and unreliable + media call)
+function syncFullMeshConnections() {
+  if (!netState.peer) return;
+  ensureAudioContext();
+  for (const member of netState.roster) {
+    if (member.id === netState.myId) continue;
+    const entry = getOrCreatePeerEntry(member.id);
+
+    // Initiate connections if our ID is lexicographically smaller, OR if we need to open unrel/call on an existing rel link
+    const shouldInitiate = netState.myId < member.id;
+    if (shouldInitiate) {
+      if (!entry.relConn) {
+        const rel = netState.peer.connect(member.id, { label: 'rel', reliable: true });
+        entry.relConn = rel;
+        setupDataConnection(rel, member.id, false);
+      }
+      if (!entry.unrelConn) {
+        const unrel = netState.peer.connect(member.id, { label: 'unrel', reliable: false });
+        entry.unrelConn = unrel;
+        setupUnreliableConnection(unrel, member.id);
+      }
+      if (!entry.call) {
+        const call = netState.peer.call(member.id, outboundDestination.stream);
+        entry.call = call;
+        call.on('stream', remoteStream => {
+          setupRemotePeerAudio(member.id, remoteStream);
+        });
+      }
+    }
+  }
+}
+
+function setupUnreliableConnection(conn, remoteId) {
+  conn.on('data', data => {
+    if (data && data.t === 'pos') {
+      onRemotePositionPacket(remoteId, data);
+    }
+  });
+}
+
+function setupDataConnection(conn, remoteId, isInitialJoinToHost, onJoinReject, onJoinAccept) {
+  conn.on('open', () => {
+    if (isInitialJoinToHost) {
+      conn.send({ t: 'joinReq', name: netState.myName, ready: assetCache.loaded });
+    }
+  });
+
+  conn.on('data', msg => {
+    if (!msg || typeof msg !== 'object') return;
+
+    if (remoteId === netState.hostId) {
+      netState.lastHostAnyMsg = performance.now();
+    }
+
+    switch (msg.t) {
+      case 'joinReq': {
+        if (!netState.isHost) return;
+        if (netState.gameStarted) {
+          conn.send({ t: 'joinRej', reason: 'Game already started' });
+          setTimeout(() => conn.close(), 250);
+          return;
+        }
+        if (netState.roster.length >= 4) {
+          conn.send({ t: 'joinRej', reason: 'Room is full' });
+          setTimeout(() => conn.close(), 250);
+          return;
+        }
+        const cleanName = sanitizeName(msg.name);
+        if (!cleanName || netState.roster.some(p => p.name === cleanName)) {
+          conn.send({ t: 'joinRej', reason: 'Name already taken' });
+          setTimeout(() => conn.close(), 250);
+          return;
+        }
+        netState.roster.push({
+          id: remoteId,
+          name: cleanName,
+          isHost: false,
+          ready: !!msg.ready,
+          spawnIndex: netState.roster.length
+        });
+        conn.send({ t: 'joinAcc', roster: netState.roster, hostId: netState.myId });
+        broadcastRoster();
+        syncFullMeshConnections();
+        break;
+      }
+
+      case 'joinRej': {
+        if (onJoinReject) onJoinReject(msg.reason || 'Connection failed. Try again');
+        break;
+      }
+
+      case 'joinAcc': {
+        netState.roster = msg.roster || [];
+        netState.hostId = msg.hostId;
+        renderLobbyRoster();
+        syncFullMeshConnections();
+        if (onJoinAccept) onJoinAccept();
+        break;
+      }
+
+      case 'roster': {
+        netState.roster = msg.roster || [];
+        renderLobbyRoster();
+        syncFullMeshConnections();
+        break;
+      }
+
+      case 'readyState': {
+        if (!netState.isHost) return;
+        const p = netState.roster.find(r => r.id === remoteId);
+        if (p) {
+          p.ready = !!msg.ready;
+          broadcastRoster();
+        }
+        break;
+      }
+
+      case 'start': {
+        netState.roster = msg.roster || netState.roster;
+        enterGameSession();
+        break;
+      }
+
+      case 'pos': {
+        onRemotePositionPacket(remoteId, msg);
+        break;
+      }
+
+      case 'chat': {
+        const sender = netState.roster.find(r => r.id === remoteId);
+        const senderName = sender ? sender.name : (msg.name || 'player');
+        const text = String(msg.text || '').slice(0, 100);
+        if (text) addChatMessage(senderName, text);
+        break;
+      }
+
+      case 'leftGame': {
+        handlePeerLeft(msg.id || remoteId, msg.name);
+        break;
+      }
+
+      case 'hostPause': {
+        setHostPausedState(true);
+        break;
+      }
+
+      case 'hostResume': {
+        netState.lastHostActiveHb = performance.now();
+        setHostPausedState(false);
+        break;
+      }
+
+      case 'hb': {
+        if (msg.paused) {
+          setHostPausedState(true);
+        } else {
+          netState.lastHostActiveHb = performance.now();
+          if (netState.hostPaused) setHostPausedState(false);
+        }
+        break;
+      }
+
+      case 'hostLeave': {
+        triggerHostLeftSequence();
+        break;
+      }
+    }
+  });
+
+  conn.on('close', () => {
+    onPeerConnectionClosed(remoteId);
+  });
+
+  conn.on('error', () => {
+    onPeerConnectionClosed(remoteId);
+  });
+}
+
+function onPeerConnectionClosed(remoteId) {
+  if (remoteId === netState.hostId && !netState.isHost) {
+    if (gameState.inGame) {
+      triggerHostLeftSequence();
+    } else {
+      cleanupNetwork();
+      openMenuPanel(null);
+    }
+    return;
+  }
+
+  const member = netState.roster.find(r => r.id === remoteId);
+  if (member) {
+    handlePeerLeft(remoteId, member.name);
+    if (netState.isHost && !gameState.inGame) {
+      broadcastRoster();
+    } else if (netState.isHost && gameState.inGame) {
+      broadcastReliable({ t: 'leftGame', id: remoteId, name: member.name }, remoteId);
+    }
+  }
+}
+
+function handlePeerLeft(peerId, fallbackName) {
+  const idx = netState.roster.findIndex(r => r.id === peerId);
+  const name = idx >= 0 ? netState.roster[idx].name : fallbackName;
+  if (idx >= 0) netState.roster.splice(idx, 1);
+
+  const peerObj = netState.peers.get(peerId);
+  if (peerObj) {
+    disposeRemotePeerAudio(peerObj);
+    try { peerObj.relConn?.close(); } catch {}
+    try { peerObj.unrelConn?.close(); } catch {}
+    try { peerObj.call?.close(); } catch {}
+    netState.peers.delete(peerId);
+  }
+
+  removeRemotePlayerEntity(peerId);
+
+  if (gameState.inGame && name) {
+    addLeftGameLog(`${name} left the game`);
+  } else if (!gameState.inGame) {
+    renderLobbyRoster();
+  }
+}
+
+$('lobby-leave-btn').addEventListener('click', () => {
+  cleanupNetwork();
+  openMenuPanel(null);
+});
+
+$('start-game-btn').addEventListener('click', () => {
+  if (!netState.isHost || !assetCache.loaded) return;
+  if (netState.roster.length < 2 || netState.roster.length > 4) return;
+  if (!netState.roster.every(p => p.ready)) return;
+
+  netState.gameStarted = true;
+  netState.roster.forEach((p, idx) => { p.spawnIndex = idx; });
+  broadcastReliable({ t: 'start', roster: netState.roster });
+  enterGameSession();
+});
+
+// ============================================================================
+// 6. HOST TAB SWITCH & HOST LEAVE HANDLING
+// ============================================================================
+document.addEventListener('visibilitychange', () => {
+  if (!gameState.inGame || !netState.isHost) return;
+  if (document.hidden) {
+    broadcastReliable({ t: 'hostPause' });
+  } else {
+    broadcastReliable({ t: 'hostResume' });
+  }
+});
+
+function sendUnloadNotice() {
+  if (!netState.peer) return;
+  if (netState.isHost && gameState.inGame) {
+    broadcastReliable({ t: 'hostLeave' });
+  } else if (gameState.inGame) {
+    broadcastReliable({ t: 'leftGame', id: netState.myId, name: netState.myName });
+  }
+}
+window.addEventListener('beforeunload', sendUnloadNotice);
+window.addEventListener('pagehide', sendUnloadNotice);
+
+function setHostPausedState(paused) {
+  if (!gameState.inGame || netState.hostLeavingTriggered) return;
+  netState.hostPaused = paused;
+  // CRITICAL: Do NOT call exitPointerLock()! Overlay has pointer-events:none so cursor stays locked.
+  $('host-pause-overlay').style.display = paused ? 'flex' : 'none';
+  if (paused) {
+    clearMovementKeys();
+    if (document.activeElement === $('chat-input')) {
+      $('chat-input').blur();
+    }
+  }
+}
+
+function triggerHostLeftSequence() {
+  if (netState.hostLeavingTriggered) return;
+  netState.hostLeavingTriggered = true;
+  netState.hostPaused = false;
+  $('host-pause-overlay').style.display = 'none';
+  $('host-left-overlay').style.display = 'flex';
+
+  setTimeout(() => {
+    if (document.pointerLockElement) {
+      try { document.exitPointerLock(); } catch {}
+    }
+    leaveGameAndReturnToMenu();
+  }, 2000);
+}
+
+// ============================================================================
+// 7. MAP PROCESSING, BVH COLLISION, CEILING LIGHTS & DETERMINISTIC SPAWN
+// ============================================================================
+const nextFrame = () => new Promise(resolve => setTimeout(resolve, 0));
+
+async function buildMapTemplate(gltf) {
+  const root = gltf.scene;
+  root.updateMatrixWorld(true);
+
+  // 1. Identify and hide stray objects sitting above the ceiling (e.g. Cube.002 at y=17.94)
+  const meshes = [];
+  let shellBox = null;
+  root.traverse(obj => {
+    if (!obj.isMesh || !obj.geometry) return;
+    const box = new THREE.Box3().setFromObject(obj);
+    if (box.min.y > 10.8 || obj.name === 'Cube.002') {
+      obj.visible = false;
+      return;
+    }
+    if (obj.name === 'Cube') shellBox = box;
+    meshes.push(obj);
+  });
+
+  await nextFrame();
+
+  // 2. Measure unscaled floor-to-ceiling height deterministically (using shell box + fast ray verification)
+  let rawFloorY = shellBox ? shellBox.min.y : 0.149;
+  let rawCeilY = shellBox ? shellBox.max.y : 8.807;
+  let rawHeight = rawCeilY - rawFloorY;
+  if (rawHeight < 5.0 || rawHeight > 12.0) {
+    rawFloorY = 0.149;
+    rawCeilY = 8.807;
+    rawHeight = rawCeilY - rawFloorY;
+  }
+
+  const mapScale = MAP_SCALE_OVERRIDE !== null ? MAP_SCALE_OVERRIDE : (2.7 / rawHeight);
+  const yOffsetMeters = -rawFloorY * mapScale;
+
+  // Scale transform matrix that scales by mapScale and aligns floor top to y = 0
+  const scaleMat = new THREE.Matrix4().makeScale(mapScale, mapScale, mapScale);
+  scaleMat.setPosition(0, yOffsetMeters, 0);
+
+  // 3. Extract primitives per material, fix negative-scale winding, and collect ceiling triangles
+  const materialMap = new Map();
+  const collisionGeos = [];
+  const ceilingTriangles = [];
+
+  for (const mesh of meshes) {
+    const worldMat = new THREE.Matrix4().multiplyMatrices(scaleMat, mesh.matrixWorld);
+    const negDet = worldMat.determinant() < 0;
+    const srcGeo = mesh.geometry;
+    const matList = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const groups = (srcGeo.groups && srcGeo.groups.length > 0 && Array.isArray(mesh.material))
+      ? srcGeo.groups
+      : [{ start: 0, count: Infinity, materialIndex: 0 }];
+
+    for (const grp of groups) {
+      const mat = matList[grp.materialIndex] || matList[0];
+      if (!mat) continue;
+
+      let subGeo = srcGeo.clone();
+      if (grp.count !== Infinity && subGeo.index) {
+        const subIdx = subGeo.index.array.slice(grp.start, grp.start + grp.count);
+        subGeo.setIndex(new THREE.BufferAttribute(subIdx, 1));
+      }
+      subGeo = subGeo.toNonIndexed();
+      subGeo.applyMatrix4(worldMat);
+
+      if (negDet) {
+        const posAttr = subGeo.attributes.position;
+        const normAttr = subGeo.attributes.normal;
+        const uvAttr = subGeo.attributes.uv;
+        for (let i = 0; i < posAttr.count; i += 3) {
+          for (const attr of [posAttr, normAttr, uvAttr]) {
+            if (!attr) continue;
+            const itemSize = attr.itemSize;
+            for (let k = 0; k < itemSize; k++) {
+              const tmp = attr.array[(i + 1) * itemSize + k];
+              attr.array[(i + 1) * itemSize + k] = attr.array[(i + 2) * itemSize + k];
+              attr.array[(i + 2) * itemSize + k] = tmp;
+            }
+          }
+        }
+        if (normAttr) {
+          for (let i = 0; i < normAttr.array.length; i++) {
+            normAttr.array[i] = -normAttr.array[i];
+          }
+        }
+      }
+
+      const cleanGeo = new THREE.BufferGeometry();
+      cleanGeo.setAttribute('position', subGeo.attributes.position);
+      if (subGeo.attributes.normal) {
+        cleanGeo.setAttribute('normal', subGeo.attributes.normal);
+      } else {
+        cleanGeo.computeVertexNormals();
+      }
+      if (subGeo.attributes.uv) {
+        cleanGeo.setAttribute('uv', subGeo.attributes.uv);
+      } else {
+        cleanGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(subGeo.attributes.position.count * 2), 2));
+      }
+
+      cleanGeo.computeBoundingBox();
+      const center = new THREE.Vector3();
+      cleanGeo.boundingBox.getCenter(center);
+
+      const cx = Math.floor(center.x / 40);
+      const cz = Math.floor(center.z / 40);
+      const chunkKey = `${cx}_${cz}`;
+
+      if (!materialMap.has(mat.uuid)) {
+        materialMap.set(mat.uuid, { mat, chunks: new Map() });
+      }
+      const bucket = materialMap.get(mat.uuid);
+      if (!bucket.chunks.has(chunkKey)) bucket.chunks.set(chunkKey, []);
+      bucket.chunks.get(chunkKey).push(cleanGeo);
+
+      const posOnly = new THREE.BufferGeometry();
+      posOnly.setAttribute('position', subGeo.attributes.position.clone());
+      collisionGeos.push(posOnly);
+
+      const isCeilingMat = (mat.name && /ceiling/i.test(mat.name)) || !!mat.emissiveMap;
+      if (isCeilingMat && subGeo.attributes.uv) {
+        const pArr = subGeo.attributes.position.array;
+        const uArr = subGeo.attributes.uv.array;
+        for (let i = 0; i < subGeo.attributes.position.count; i += 3) {
+          const p0 = new THREE.Vector3(pArr[i * 3], pArr[i * 3 + 1], pArr[i * 3 + 2]);
+          const p1 = new THREE.Vector3(pArr[(i + 1) * 3], pArr[(i + 1) * 3 + 1], pArr[(i + 1) * 3 + 2]);
+          const p2 = new THREE.Vector3(pArr[(i + 2) * 3], pArr[(i + 2) * 3 + 1], pArr[(i + 2) * 3 + 2]);
+          if (p0.y > 2.0 && p1.y > 2.0 && p2.y > 2.0 && Math.abs(p0.y - p1.y) < 0.2 && Math.abs(p0.y - p2.y) < 0.2) {
+            const uv0 = new THREE.Vector2(uArr[i * 2], uArr[i * 2 + 1]);
+            const uv1 = new THREE.Vector2(uArr[(i + 1) * 2], uArr[(i + 1) * 2 + 1]);
+            const uv2 = new THREE.Vector2(uArr[(i + 2) * 2], uArr[(i + 2) * 2 + 1]);
+            ceilingTriangles.push({ p0, p1, p2, uv0, uv1, uv2, mat });
+          }
+        }
+      }
+    }
+  }
+
+  await nextFrame();
+
+  // 4. Merge visual spatial chunks per material
+  const chunkEntries = [];
+  for (const { mat, chunks } of materialMap.values()) {
+    mat.side = THREE.DoubleSide;
+    if ((mat.name && /ceiling/i.test(mat.name)) || mat.emissiveMap) {
+      mat.emissive = new THREE.Color(0xffffff);
+      if (mat.emissiveMap) {
+        mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+      }
+      const extStrength = mat.userData?.gltfExtensions?.KHR_materials_emissive_strength?.emissiveStrength;
+      mat.emissiveIntensity = Math.max(extStrength || mat.emissiveIntensity || 1.0, 2.2);
+    }
+    for (const geoList of chunks.values()) {
+      const merged = BufferGeometryUtils.mergeGeometries(geoList, false);
+      merged.computeBoundingBox();
+      merged.computeBoundingSphere();
+      chunkEntries.push({ geometry: merged, material: mat });
+    }
+  }
+
+  await nextFrame();
+
+  // 5. Build unified position-only collision geometry & three-mesh-bvh tree
+  // CRITICAL: Use THREE.DoubleSide and acceleratedRaycast so interior shell faces are hit in O(log N)
+  const mergedCollisionGeo = BufferGeometryUtils.mergeGeometries(collisionGeos, false);
+  const bvh = new MeshBVH(mergedCollisionGeo, { lazyGeneration: false });
+  mergedCollisionGeo.boundsTree = bvh;
+  const bvhMesh = new THREE.Mesh(
+    mergedCollisionGeo,
+    new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })
+  );
+  bvhMesh.raycast = acceleratedRaycast;
+
+  // Verify floor-to-ceiling height via BVH raycasts and log
+  const verifyRay = new THREE.Raycaster();
+  verifyRay.set(new THREE.Vector3(0, 1.35, 0), new THREE.Vector3(0, -1, 0));
+  const vfHit = verifyRay.intersectObject(bvhMesh, false)[0];
+  verifyRay.set(new THREE.Vector3(0, 1.35, 0), new THREE.Vector3(0, 1, 0));
+  const vcHit = verifyRay.intersectObject(bvhMesh, false)[0];
+  console.log(
+    '[MAP] Unscaled floorY:', rawFloorY.toFixed(4),
+    'ceilY:', rawCeilY.toFixed(4),
+    'MAP_SCALE:', mapScale.toFixed(6),
+    'Verified scaled floor/ceil:', vfHit?.point.y.toFixed(3), vcHit?.point.y.toFixed(3)
+  );
+
+  await nextFrame();
+
+  // 6. Detect ceiling light panels from the ceiling emissive texture in UV space
+  const ceilingPanels = detectCeilingLightPanels(ceilingTriangles);
+  console.log('[LIGHTS] Enumerated ceiling light panels:', ceilingPanels.length);
+
+  await nextFrame();
+
+  // 7. Find deterministic SPAWN and 4 collision-free player offsets using accelerated BVH raycasts
+  const { spawn, spawnOffsets } = computeDeterministicSpawn(bvhMesh, bvh);
+  console.log('[SPAWN] Deterministic SPAWN:', spawn, 'Player offsets:', spawnOffsets);
+
+  return {
+    mapScale,
+    chunkEntries,
+    collisionGeo: mergedCollisionGeo,
+    bvh,
+    bvhMesh,
+    ceilingPanels,
+    spawn,
+    spawnOffsets
+  };
+}
+
+function detectCeilingLightPanels(ceilingTriangles) {
+  if (ceilingTriangles.length === 0) return [];
+  const mat = ceilingTriangles[0].mat;
+  const emissiveTex = mat?.emissiveMap;
+  let uvBrightCenters = [];
+
+  if (emissiveTex && emissiveTex.image) {
+    const img = emissiveTex.image;
+    const W = 128, H = 128;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(img, 0, 0, W, H);
+    const data = ctx.getImageData(0, 0, W, H).data;
+    const visited = new Uint8Array(W * H);
+
+    const isBright = idx => {
+      const p = idx * 4;
+      return (data[p] + data[p + 1] + data[p + 2]) / 3 > 110;
+    };
+
+    const regions = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const startIdx = y * W + x;
+        if (visited[startIdx] || !isBright(startIdx)) continue;
+        const queue = [startIdx];
+        visited[startIdx] = 1;
+        let sumX = 0, sumY = 0, count = 0;
+        while (queue.length > 0) {
+          const cur = queue.pop();
+          const cx = cur % W;
+          const cy = (cur - cx) / W;
+          sumX += cx + 0.5;
+          sumY += cy + 0.5;
+          count++;
+          const nbs = [
+            cy > 0 ? (cy - 1) * W + cx : -1,
+            cy < H - 1 ? (cy + 1) * W + cx : -1,
+            cx > 0 ? cy * W + (cx - 1) : -1,
+            cx < W - 1 ? cy * W + (cx + 1) : -1
+          ];
+          for (const nb of nbs) {
+            if (nb >= 0 && !visited[nb] && isBright(nb)) {
+              visited[nb] = 1;
+              queue.push(nb);
+            }
+          }
+        }
+        if (count >= 4) {
+          const u = (sumX / count) / W;
+          const vRaw = (sumY / count) / H;
+          const v = emissiveTex.flipY ? (1.0 - vRaw) : vRaw;
+          regions.push({ u, v, count });
+        }
+      }
+    }
+    // Keep up to top 4 largest light regions per UV tile so noise pixels never explode loop count
+    regions.sort((a, b) => b.count - a.count);
+    uvBrightCenters = regions.slice(0, 4);
+  }
+
+  if (uvBrightCenters.length === 0) {
+    uvBrightCenters.push({ u: 0.5, v: 0.5 });
+  }
+
+  const panels = [];
+  const spatialHash = new Set();
+
+  for (const tri of ceilingTriangles) {
+    const { p0, p1, p2, uv0, uv1, uv2 } = tri;
+    const uMin = Math.min(uv0.x, uv1.x, uv2.x);
+    const uMax = Math.max(uv0.x, uv1.x, uv2.x);
+    const vMin = Math.min(uv0.y, uv1.y, uv2.y);
+    const vMax = Math.max(uv0.y, uv1.y, uv2.y);
+
+    // Guard against degenerate/extreme UV spans
+    if ((uMax - uMin) > 300 || (vMax - vMin) > 300) continue;
+
+    const du0 = uv1.x - uv0.x, dv0 = uv1.y - uv0.y;
+    const du1 = uv2.x - uv0.x, dv1 = uv2.y - uv0.y;
+    const denom = du0 * dv1 - du1 * dv0;
+    if (Math.abs(denom) < 1e-8) continue;
+
+    const iuStart = Math.floor(uMin);
+    const iuEnd = Math.ceil(uMax);
+    const ivStart = Math.floor(vMin);
+    const ivEnd = Math.ceil(vMax);
+
+    for (let iu = iuStart; iu <= iuEnd; iu++) {
+      for (let iv = ivStart; iv <= ivEnd; iv++) {
+        for (const c of uvBrightCenters) {
+          const U = iu + c.u;
+          const V = iv + c.v;
+          if (U < uMin || U > uMax || V < vMin || V > vMax) continue;
+
+          const du2 = U - uv0.x, dv2 = V - uv0.y;
+          const b1 = (du2 * dv1 - du1 * dv2) / denom;
+          const b2 = (du0 * dv2 - du2 * dv0) / denom;
+          const b0 = 1.0 - b1 - b2;
+
+          if (b0 >= -1e-3 && b1 >= -1e-3 && b2 >= -1e-3) {
+            const wx = p0.x * b0 + p1.x * b1 + p2.x * b2;
+            const wy = p0.y * b0 + p1.y * b1 + p2.y * b2;
+            const wz = p0.z * b0 + p1.z * b1 + p2.z * b2;
+            // Deduplicate light fixture centers on a 1.5m grid
+            const key = `${Math.round(wx / 1.5)}_${Math.round(wz / 1.5)}`;
+            if (!spatialHash.has(key)) {
+              spatialHash.add(key);
+              panels.push(new THREE.Vector3(wx, wy - 0.08, wz));
+            }
+          }
+        }
+      }
+    }
+  }
+  return panels;
+}
+
+const _segLine = new THREE.Line3();
+const _triPt = new THREE.Vector3();
+const _segPt = new THREE.Vector3();
+
+function capsuleIntersectsBVH(bvh, x, y, z, radius, height) {
+  _segLine.start.set(x, y + radius, z);
+  _segLine.end.set(x, y + height - radius, z);
+  const box = new THREE.Box3();
+  box.min.set(x - radius, y + 0.08, z - radius);
+  box.max.set(x + radius, y + height - 0.08, z + radius);
+
+  let hit = false;
+  bvh.shapecast({
+    intersectsBounds: b => b.intersectsBox(box),
+    intersectsTriangle: tri => {
+      tri.closestPointToSegment(_segLine, _triPt, _segPt);
+      if (_triPt.y <= y + 0.10) return false;
+      if (_triPt.distanceToSquared(_segPt) < radius * radius) {
+        hit = true;
+        return true;
+      }
+      return false;
+    }
+  });
+  return hit;
+}
+
+function computeDeterministicSpawn(bvhMesh, bvh) {
+  if (SPAWN_OVERRIDE) {
+    return {
+      spawn: { ...SPAWN_OVERRIDE },
+      spawnOffsets: [
+        { x: SPAWN_OVERRIDE.x, y: SPAWN_OVERRIDE.y, z: SPAWN_OVERRIDE.z },
+        { x: SPAWN_OVERRIDE.x + 1.0, y: SPAWN_OVERRIDE.y, z: SPAWN_OVERRIDE.z },
+        { x: SPAWN_OVERRIDE.x - 1.0, y: SPAWN_OVERRIDE.y, z: SPAWN_OVERRIDE.z },
+        { x: SPAWN_OVERRIDE.x, y: SPAWN_OVERRIDE.y, z: SPAWN_OVERRIDE.z + 1.0 }
+      ]
+    };
+  }
+
+  const ray = new THREE.Raycaster();
+  ray.firstHitOnly = true; // তিন-mesh-bvh early-out optimization
+  const down = new THREE.Vector3(0, -1, 0);
+  const up = new THREE.Vector3(0, 1, 0);
+  const dir8 = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4;
+    dir8.push(new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
+  }
+
+  function isPointClear(x, z, clearanceRadius = 1.0) {
+    ray.set(new THREE.Vector3(x, 1.4, z), down);
+    ray.near = 0; ray.far = 2.2;
+    const fHit = ray.intersectObject(bvhMesh, false)[0];
+    if (!fHit || Math.abs(fHit.point.y) > 0.35) return null;
+    const fy = fHit.point.y;
+
+    ray.set(new THREE.Vector3(x, fy + 1.0, z), up);
+    ray.near = 0; ray.far = 3.5;
+    const cHit = ray.intersectObject(bvhMesh, false)[0];
+    if (!cHit || (cHit.point.y - fy) < 2.2) return null;
+
+    for (const d of dir8) {
+      ray.set(new THREE.Vector3(x, fy + 1.0, z), d);
+      ray.near = 0; ray.far = clearanceRadius;
+      if (ray.intersectObject(bvhMesh, false).length > 0) return null;
+    }
+
+    if (capsuleIntersectsBVH(bvh, x, fy, z, CAPSULE_RADIUS, STAND_HEIGHT)) return null;
+    return { x, y: fy, z, yaw: 0 };
+  }
+
+  let foundSpawn = null;
+  const step = 0.75;
+  for (let ring = 0; ring <= 40 && !foundSpawn; ring++) {
+    for (let ix = -ring; ix <= ring && !foundSpawn; ix++) {
+      for (let iz = -ring; iz <= ring && !foundSpawn; iz++) {
+        if (Math.max(Math.abs(ix), Math.abs(iz)) !== ring) continue;
+        foundSpawn = isPointClear(ix * step, iz * step, 1.0);
+      }
+    }
+  }
+  if (!foundSpawn) {
+    foundSpawn = { x: 0, y: 0, z: 0, yaw: 0 };
+  }
+
+  const spawnOffsets = [];
+  const baseAngles = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
+  const radii = [1.2, 0.85, 0.5, 1.5];
+
+  for (let pIdx = 0; pIdx < 4; pIdx++) {
+    let slot = null;
+    for (const r of radii) {
+      for (let aStep = 0; aStep < 16 && !slot; aStep++) {
+        const ang = baseAngles[pIdx] + (aStep * Math.PI) / 8;
+        const px = foundSpawn.x + Math.cos(ang) * r;
+        const pz = foundSpawn.z + Math.sin(ang) * r;
+
+        const toSlot = new THREE.Vector3(px - foundSpawn.x, 0, pz - foundSpawn.z);
+        const dist = toSlot.length();
+        if (dist > 0.01) {
+          ray.set(new THREE.Vector3(foundSpawn.x, foundSpawn.y + 1.0, foundSpawn.z), toSlot.normalize());
+          ray.near = 0; ray.far = dist;
+          if (ray.intersectObject(bvhMesh, false).length > 0) continue;
+        }
+
+        const check = isPointClear(px, pz, 0.45);
+        if (check) {
+          const tooClose = spawnOffsets.some(s => Math.hypot(s.x - px, s.z - pz) < 0.65);
+          if (!tooClose) slot = check;
+        }
+      }
+      if (slot) break;
+    }
+    spawnOffsets.push(slot || { ...foundSpawn });
+  }
+
+  return { spawn: foundSpawn, spawnOffsets };
+}
+
+// ============================================================================
+// 8. CHARACTER MODEL & PROCEDURAL JUMP SYSTEM (Reused from prototype_room.html)
+// ============================================================================
+// Procedural leap keyframes (degrees): thigh swing forward (+), knee bend, for lead and trail leg; u = 0..1 of airtime
+const KT = [0, 0.12, 0.3, 0.55, 0.8, 0.92, 1];
+const LT = [30, 75, 65, 55, 35, 20, 15];
+const LK = [40, 95, 80, 55, 20, 15, 25];
+const TT = [-25, -35, -40, -25, 5, 12, 15];
+const TK = [20, 25, 75, 85, 40, 25, 30];
+
+function kf(a, u) {
+  let i = 0;
+  while (i < KT.length - 2 && u > KT[i + 1]) i++;
+  const t = clamp((u - KT[i]) / (KT[i + 1] - KT[i]), 0, 1);
+  const e = t * t * (3 - 2 * t);
+  return a[i] + (a[i + 1] - a[i]) * e;
+}
+
+function skinBox(m) {
+  m.updateMatrixWorld(true);
+  const b = new THREE.Box3();
+  m.traverse(o => {
+    if (!o.isSkinnedMesh) return;
+    o.skeleton.update();
+    o.boundingBox = null;
+    if (o.computeBoundingBox) {
+      o.computeBoundingBox();
+      b.union(o.boundingBox.clone().applyMatrix4(o.matrixWorld));
+    } else {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      b.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+    }
+  });
+  return b;
+}
+
+const _Qd = new THREE.Quaternion();
+const _Qp = new THREE.Quaternion();
+const _Qt = new THREE.Quaternion();
+const _Qn = new THREE.Quaternion();
+const _latAxis = new THREE.Vector3();
+const _headAxisX = new THREE.Vector3(1, 0, 0);
+
+function createCharacterRig(charGltf) {
+  const m = SkeletonUtils.clone(charGltf.scene);
+  const group = new THREE.Group();
+  group.add(m);
+  m.updateMatrixWorld(true);
+
+  let headBone = null;
+  m.traverse(o => {
+    if (o.isSkinnedMesh) {
+      o.frustumCulled = false;
+    }
+    if (o.isBone && /^mixamorigHead(_\d+)?$/.test(o.name)) {
+      headBone = o;
+    }
+  });
+
+  // Measure REAL skinned height and scale group to STAND_HEIGHT, feet at y=0, centered
+  const h0 = skinBox(m).getSize(new THREE.Vector3()).y;
+  const k = h0 > 0 ? STAND_HEIGHT / h0 : 1;
+  group.scale.setScalar(k);
+  group.updateMatrixWorld(true);
+  const b = skinBox(m);
+  const c = b.getCenter(new THREE.Vector3());
+  m.position.set(-c.x / k, -b.min.y / k, -c.z / k);
+
+  const sk = [];
+  m.traverse(o => { if (o.isSkinnedMesh) sk.push(o.skeleton); });
+  const fb = re => {
+    let x = null;
+    m.traverse(o => { if (o.isBone && re.test(o.name)) x = o; });
+    return x;
+  };
+
+  const JB = {
+    LU: fb(/^mixamorigLeftUpLeg/),
+    LL: fb(/^mixamorigLeftLeg/),
+    LF: fb(/^mixamorigLeftFoot/),
+    RU: fb(/^mixamorigRightUpLeg/),
+    RL: fb(/^mixamorigRightLeg/),
+    RF: fb(/^mixamorigRightFoot/),
+    SP: fb(/^mixamorigSpine_\d+$/)
+  };
+
+  const REST = new Map();
+  if (sk[0]) {
+    for (const key in JB) {
+      const bone = JB[key];
+      if (!bone) continue;
+      const idx = sk[0].bones.indexOf(bone);
+      if (idx >= 0) {
+        const q = new THREE.Quaternion();
+        sk[0].boneInverses[idx].clone().invert().decompose(new THREE.Vector3(), q, new THREE.Vector3());
+        REST.set(bone, q);
+      }
+    }
+  }
+
+  const mixer = new THREE.AnimationMixer(m);
+  const clips = {};
+  charGltf.animations.forEach(a => { clips[a.name] = a; });
+
+  let curAction = null;
+  let curClipName = '';
+  const headInv = new THREE.Quaternion();
+  let hasHeadInv = false;
+  const savedQuats = [];
+
+  function playClip(name, timeScale = 1, force = false) {
+    const clip = clips[name];
+    if (!clip) return;
+    if (name === curClipName && !force) {
+      if (curAction) curAction.timeScale = timeScale;
+      return;
+    }
+    const act = mixer.clipAction(clip);
+    act.reset();
+    act.timeScale = timeScale;
+    if (clip.duration === 0 || name === 'Jump in place') {
+      act.setLoop(THREE.LoopOnce, 1);
+      act.clampWhenFinished = true;
+    } else {
+      act.setLoop(THREE.LoopRepeat, Infinity);
+    }
+    if (curAction && curAction !== act) {
+      act.crossFadeFrom(curAction, 0.25, false);
+    }
+    act.play();
+    curAction = act;
+    curClipName = name;
+  }
+
+  function setW(bone, ang, w) {
+    _Qd.setFromAxisAngle(_latAxis, ang);
+    _Qt.copy(_Qd).multiply(_Qn).multiply(REST.get(bone));
+    bone.parent.getWorldQuaternion(_Qp);
+    _Qt.premultiply(_Qp.invert());
+    bone.quaternion.slerp(_Qt, w);
+  }
+
+  function poseLeg(U, L, F, th, kb, w) {
+    setW(U, th, w);
+    setW(L, th - kb, w);
+    setW(F, (th - kb) * 0.5, w);
+  }
+
+  function applyJumpPose(u, w, modelYaw) {
+    const d = Math.PI / 180;
+    group.updateMatrixWorld(true);
+    group.getWorldQuaternion(_Qn);
+    _latAxis.set(-Math.cos(modelYaw), 0, Math.sin(modelYaw));
+
+    for (const key in JB) {
+      if (JB[key]) savedQuats.push([JB[key], JB[key].quaternion.clone()]);
+    }
+    if (JB.LU && JB.RU && REST.has(JB.LU) && REST.has(JB.RU)) {
+      poseLeg(JB.LU, JB.LL, JB.LF, kf(LT, u) * d, kf(LK, u) * d, w);
+      poseLeg(JB.RU, JB.RL, JB.RF, kf(TT, u) * d, kf(TK, u) * d, w);
+    }
+    if (JB.SP) {
+      _Qd.setFromAxisAngle(_latAxis, -18 * d * w);
+      JB.SP.parent.getWorldQuaternion(_Qp);
+      JB.SP.getWorldQuaternion(_Qt);
+      _Qt.premultiply(_Qd).premultiply(_Qp.invert());
+      JB.SP.quaternion.copy(_Qt);
+    }
+  }
+
+  playClip('Idle', 1, true);
+
+  return {
+    group,
+    mixer,
+    update(dt, state, moveSpeed, pitchRad, yawRad, jp) {
+      // 1. Undo last frame's head rotation and procedural jump bone overrides so they never accumulate
+      if (headBone && hasHeadInv) {
+        headBone.quaternion.multiply(headInv);
+        hasHeadInv = false;
+      }
+      for (const [b, q] of savedQuats) b.quaternion.copy(q);
+      savedQuats.length = 0;
+
+      // 2. Map movement state to animation clip & timeScale
+      let clipName = 'Idle';
+      let ts = 1.0;
+      switch (state) {
+        case 'walk':
+        case 'strafe':
+          clipName = 'Walking';
+          ts = clamp(moveSpeed / WALK_SPEED, 0.8, 1.5);
+          break;
+        case 'run':
+          clipName = 'Running';
+          ts = clamp(moveSpeed / RUN_SPEED, 0.8, 1.5);
+          break;
+        case 'back':
+          clipName = 'Walking Backwards';
+          ts = clamp(moveSpeed / WALK_SPEED, 0.8, 1.5);
+          break;
+        case 'crouch':
+          clipName = 'Crouch static';
+          ts = 1.0;
+          break;
+        case 'crouchwalk':
+          clipName = 'Crouch Walking';
+          ts = clamp(moveSpeed / CROUCH_SPEED, 0.8, 1.5);
+          break;
+        case 'jumpin':
+          clipName = 'Jump in place';
+          ts = 1.15;
+          break;
+        case 'hopwalk':
+          clipName = 'Walking';
+          ts = 1.0;
+          break;
+        case 'hoprun':
+          clipName = 'Running';
+          ts = 1.0;
+          break;
+        default:
+          clipName = 'Idle';
+          ts = 1.0;
+      }
+      playClip(clipName, ts);
+
+      // 3. Advance AnimationMixer
+      mixer.update(dt);
+
+      // 4. Apply head pitch clamped to -55..+50 degrees
+      if (headBone) {
+        const clampedDeg = clamp(THREE.MathUtils.radToDeg(pitchRad), -55, 50);
+        const q = new THREE.Quaternion().setFromAxisAngle(_headAxisX, -THREE.MathUtils.degToRad(clampedDeg));
+        headBone.quaternion.multiply(q);
+        headInv.copy(q).invert();
+        hasHeadInv = true;
+      }
+
+      // 5. Orient character body yaw (+PI because Mixamo faces +Z while camera faces -Z at yaw=0)
+      const modelYaw = yawRad + Math.PI;
+      group.rotation.y = modelYaw;
+
+      // 6. Apply procedural leap pose on forward jumps
+      if ((state === 'hopwalk' || state === 'hoprun') && jp > 0 && jp < 1) {
+        const pw = clamp(Math.min(jp / 0.1, (1 - jp) / 0.12), 0, 1);
+        if (pw > 0) applyJumpPose(jp, pw, modelYaw);
+      }
+    },
+    dispose() {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(m);
+    }
+  };
+}
+
+// Create small in-world lowercase nametag sprite above remote players
+function createNameTagSprite(name) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.9, 0.225, 1);
+  sprite.position.set(0, STAND_HEIGHT + 0.18, 0);
+
+  function draw(speaking) {
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.fillStyle = speaking ? 'rgba(30, 28, 12, 0.85)' : 'rgba(8, 8, 6, 0.65)';
+    ctx.strokeStyle = speaking ? '#e6d668' : 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = speaking ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.roundRect(28, 12, 200, 40, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = 'bold 22px "Courier New", monospace';
+    ctx.fillStyle = speaking ? '#fff394' : '#eceadc';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name.toLowerCase(), 128, 33);
+    tex.needsUpdate = true;
+  }
+  draw(false);
+
+  return { sprite, draw, tex, mat, speaking: false };
+}
+
+function setRemoteNameTagSpeaking(rPlayer, speaking) {
+  if (!rPlayer.nameTag || rPlayer.nameTag.speaking === speaking) return;
+  rPlayer.nameTag.speaking = speaking;
+  rPlayer.nameTag.draw(speaking);
+}
+
+// ============================================================================
+// 9. THREE.JS SCENE, DYNAMIC CEILING LIGHT POOL, PLAYER & REMOTE PLAYERS
+// ============================================================================
+const canvas = $('game-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const dpr = Math.min(window.devicePixelRatio, 2);
+renderer.setPixelRatio(dpr);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = false; // No shadow maps for steady 60fps with 4 players
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+
+// Single-pass GPU VHS Camcorder RenderTarget & Post-Process Shader (Zero CPU lag)
+const vhsTarget = new THREE.WebGLRenderTarget(
+  Math.floor(window.innerWidth * dpr),
+  Math.floor(window.innerHeight * dpr),
+  { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }
+);
+vhsTarget.texture.colorSpace = THREE.SRGBColorSpace;
+
+const vhsScene = new THREE.Scene();
+const vhsCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const vhsMaterial = new THREE.ShaderMaterial({
+  toneMapped: false,
+  depthTest: false,
+  depthWrite: false,
+  uniforms: {
+    tDiffuse: { value: vhsTarget.texture },
+    uTime: { value: 0 },
+    uResolution: { value: new THREE.Vector2(window.innerWidth * dpr, window.innerHeight * dpr) }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform vec2 uResolution;
+    varying vec2 vUv;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    void main() {
+      // 1. Subtle camcorder barrel lens curvature
+      vec2 cc = vUv - 0.5;
+      float r2 = dot(cc, cc);
+      vec2 uv = vUv + cc * (0.075 * r2);
+
+      // 2. Subtle VHS horizontal tracking wave
+      float trackBand = smoothstep(0.05, 0.0, abs(fract(uv.y + uTime * 0.05) - 0.5));
+      uv.x += trackBand * 0.0012 * sin(uTime * 35.0 + uv.y * 90.0);
+
+      // 3. VHS chromatic aberration (red/blue color bleed stronger toward lens edges)
+      float shift = 0.0016 + r2 * 0.0045;
+      float r = texture2D(tDiffuse, clamp(uv + vec2(shift, 0.0), 0.001, 0.999)).r;
+      float g = texture2D(tDiffuse, clamp(uv, 0.001, 0.999)).g;
+      float b = texture2D(tDiffuse, clamp(uv - vec2(shift, 0.0), 0.001, 0.999)).b;
+      vec3 col = vec3(r, g, b);
+
+      // 4. Subtle VHS tape luma/chroma warmth & slight desaturation
+      float luma = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(col, vec3(luma), 0.14);
+      col *= vec3(1.02, 1.00, 0.95);
+
+      // 5. Subtle CRT/VHS horizontal scanlines
+      float scanline = sin(uv.y * uResolution.y * 1.15) * 0.024;
+      col -= scanline;
+
+      // 6. Animated found-footage film grain
+      vec2 grainCoord = floor(uv * uResolution * 0.65) + vec2(fract(uTime * 37.0) * 100.0, fract(uTime * 19.0) * 100.0);
+      float grain = hash(grainCoord) - 0.5;
+      col += grain * 0.068;
+
+      // 7. Soft camcorder lens vignette at corners
+      float vig = smoothstep(0.78, 0.18, r2);
+      col *= mix(0.66, 1.0, vig);
+
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+    }
+  `
+});
+vhsScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), vhsMaterial));
+
+let scene = null;
+let camera = null;
+
+window.addEventListener('resize', () => {
+  const curDpr = Math.min(window.devicePixelRatio, 2);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  vhsTarget.setSize(Math.floor(window.innerWidth * curDpr), Math.floor(window.innerHeight * curDpr));
+  vhsMaterial.uniforms.uResolution.value.set(window.innerWidth * curDpr, window.innerHeight * curDpr);
+  if (camera) {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  }
+});
+
+const gameState = {
+  inGame: false,
+  enteredFirstPerson: false,
+  bvh: null,
+  bvhMesh: null,
+  ceilingPanels: [],
+  lightPool: [],
+  localRig: null,
+  lastNetSend: 0,
+  fpsFrames: 0,
+  fpsTime: 0,
+  fpsValue: 60
+};
+
+const player = {
+  x: 0, y: 0, z: 0,
+  groundY: 0,
+  yaw: 0, pitch: 0,
+  eye: EYE_STAND,
+  crouch: false,
+  state: 'idle',
+  speed: 0,
+  // Jump state
+  jumping: false,
+  jumpType: '', // 'hoprun' | 'hopwalk' | 'jumpin'
+  jumpT: 0,
+  jumpDur: 0.5,
+  jumpH: 0,
+  jumpArcY: 0,
+  jumpVel: 0,
+  jumpYaw: 0,
+  jp: 0
+};
+
+const remotePlayers = new Map(); // peerId -> { id, name, rig, nameTag, snapshots: [], pos, yaw, pitch, state, crouch, jp }
+
+function createDynamicLightPool(targetScene) {
+  const pool = [];
+  const POOL_SIZE = 10;
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const light = new THREE.PointLight(0xfff4cc, 0, 14.5, 1.75);
+    targetScene.add(light);
+    pool.push({
+      light,
+      panelIndex: -1,
+      currentIntensity: 0,
+      targetIntensity: 0
+    });
+  }
+  return pool;
+}
+
+// Smoothly assign pooled PointLights to nearest ceiling panels without visual popping
+function updateCeilingLightPool(dt) {
+  const panels = gameState.ceilingPanels;
+  const pool = gameState.lightPool;
+  if (!panels.length || !pool.length || !camera) return;
+
+  const camPos = camera.position;
+  const MAX_DIST = 16.0;
+
+  // Find candidate panels within MAX_DIST
+  const candidates = [];
+  for (let i = 0; i < panels.length; i++) {
+    const p = panels[i];
+    const dx = p.x - camPos.x;
+    const dz = p.z - camPos.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < MAX_DIST * MAX_DIST) {
+      candidates.push({ index: i, dist: Math.sqrt(d2) });
+    }
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  const topSet = new Map();
+  for (let i = 0; i < Math.min(pool.length, candidates.length); i++) {
+    topSet.set(candidates[i].index, candidates[i].dist);
+  }
+
+  const assignedIndices = new Set();
+  for (const slot of pool) {
+    if (slot.panelIndex >= 0) {
+      const p = panels[slot.panelIndex];
+      const dist = Math.hypot(p.x - camPos.x, p.z - camPos.z);
+      if (topSet.has(slot.panelIndex) && dist < MAX_DIST) {
+        const falloff = clamp(1.0 - Math.pow(dist / MAX_DIST, 2), 0, 1);
+        slot.targetIntensity = 1.65 * falloff;
+        assignedIndices.add(slot.panelIndex);
+      } else {
+        // Fade smoothly to 0 before reassigning so lights never pop
+        slot.targetIntensity = 0;
+      }
+    }
+  }
+
+  for (const slot of pool) {
+    // Reassign slot only when its intensity has faded to near zero
+    if (slot.currentIntensity <= 0.02 && slot.targetIntensity === 0) {
+      let nextCandidate = null;
+      for (const [idx, dist] of topSet.entries()) {
+        if (!assignedIndices.has(idx)) {
+          nextCandidate = { idx, dist };
+          break;
+        }
+      }
+      if (nextCandidate) {
+        slot.panelIndex = nextCandidate.idx;
+        assignedIndices.add(nextCandidate.idx);
+        slot.light.position.copy(panels[nextCandidate.idx]);
+        const falloff = clamp(1.0 - Math.pow(nextCandidate.dist / MAX_DIST, 2), 0, 1);
+        slot.targetIntensity = 1.65 * falloff;
+      }
+    }
+
+    const fadeRate = slot.targetIntensity > slot.currentIntensity ? 4.5 : 6.0;
+    slot.currentIntensity += (slot.targetIntensity - slot.currentIntensity) * Math.min(1, dt * fadeRate);
+    if (slot.currentIntensity < 0.005 && slot.targetIntensity === 0) slot.currentIntensity = 0;
+    slot.light.intensity = slot.currentIntensity;
+  }
+}
+
+function enterGameSession() {
+  if (gameState.inGame || !assetCache.loaded) return;
+  disposeGameScene();
+
+  gameState.inGame = true;
+  gameState.enteredFirstPerson = false;
+  netState.lastHostActiveHb = performance.now();
+  netState.lastHostAnyMsg = performance.now();
+  netState.hostPaused = false;
+  netState.hostLeavingTriggered = false;
+
+  // Build scene from cached map template
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x1b180d);
+  scene.fog = new THREE.FogExp2(0x1b180d, 0.036);
+
+  camera = new THREE.PerspectiveCamera(CAM_FOV, window.innerWidth / window.innerHeight, 0.05, 120);
+  camera.rotation.order = 'YXZ';
+  startGameAmbience();
+
+  // Soft warm ambient & hemisphere fill so no area is pitch black
+  scene.add(new THREE.HemisphereLight(0xfff2c2, 0x5c5032, 0.65));
+  scene.add(new THREE.AmbientLight(0xffecb0, 0.28));
+
+  const tpl = assetCache.mapTemplate;
+  const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  for (const entry of tpl.chunkEntries) {
+    const m = entry.material;
+    for (const tex of [m.map, m.normalMap, m.emissiveMap, m.roughnessMap]) {
+      if (tex) tex.anisotropy = maxAniso;
+    }
+    const mesh = new THREE.Mesh(entry.geometry, m);
+    scene.add(mesh);
+  }
+
+  gameState.bvh = tpl.bvh;
+  gameState.bvhMesh = tpl.bvhMesh;
+  gameState.ceilingPanels = tpl.ceilingPanels;
+  gameState.lightPool = createDynamicLightPool(scene);
+
+  // Determine deterministic spawn slot from roster order
+  const meInRoster = netState.roster.find(r => r.id === netState.myId);
+  const spawnIdx = clamp(meInRoster ? meInRoster.spawnIndex : 0, 0, 3);
+  const mySlot = tpl.spawnOffsets[spawnIdx] || tpl.spawn;
+
+  player.x = mySlot.x;
+  player.y = mySlot.y;
+  player.groundY = mySlot.y;
+  player.z = mySlot.z;
+  player.yaw = tpl.spawn.yaw || 0;
+  player.pitch = 0;
+  player.eye = EYE_STAND;
+  player.crouch = false;
+  player.state = 'idle';
+  player.jumping = false;
+  player.jumpArcY = 0;
+  player.jp = 0;
+
+  // Local player character model (hidden from local player's own camera)
+  gameState.localRig = createCharacterRig(assetCache.charGltf);
+  gameState.localRig.group.visible = false;
+  scene.add(gameState.localRig.group);
+
+  // Create remote player entities for everyone else in the roster
+  for (const member of netState.roster) {
+    if (member.id === netState.myId) continue;
+    ensureRemotePlayerEntity(member.id, member.name, tpl.spawnOffsets[member.spawnIndex] || tpl.spawn);
+  }
+
+  // Update UI overlays: show "Click to enter the game" for every player (host and clients)
+  $('main-menu').style.display = 'none';
+  $('esc-menu').style.display = 'none';
+  $('host-pause-overlay').style.display = 'none';
+  $('host-left-overlay').style.display = 'none';
+  $('hud').style.display = 'block';
+  $('click-to-enter').style.display = 'flex';
+  $('chat-messages').innerHTML = '';
+  $('left-game-log').innerHTML = '';
+  $('chat-input').value = '';
+
+  heartbeatWorker.postMessage('start');
+}
+
+function ensureRemotePlayerEntity(peerId, name, initialPos) {
+  if (remotePlayers.has(peerId)) return remotePlayers.get(peerId);
+  const rig = createCharacterRig(assetCache.charGltf);
+  rig.group.visible = true;
+  const nameTag = createNameTagSprite(name || 'player');
+  rig.group.add(nameTag.sprite);
+  if (scene) scene.add(rig.group);
+
+  const sx = initialPos?.x ?? 0;
+  const sy = initialPos?.y ?? 0;
+  const sz = initialPos?.z ?? 0;
+  rig.group.position.set(sx, sy, sz);
+
+  const rObj = {
+    id: peerId,
+    name: name || 'player',
+    rig,
+    nameTag,
+    snapshots: [],
+    pos: new THREE.Vector3(sx, sy, sz),
+    yaw: 0,
+    pitch: 0,
+    state: 'idle',
+    crouch: false,
+    jp: 0
+  };
+  remotePlayers.set(peerId, rObj);
+  return rObj;
+}
+
+function removeRemotePlayerEntity(peerId) {
+  const rObj = remotePlayers.get(peerId);
+  if (!rObj) return;
+  if (scene) scene.remove(rObj.rig.group);
+  rObj.rig.dispose();
+  rObj.nameTag.tex.dispose();
+  rObj.nameTag.mat.dispose();
+  remotePlayers.delete(peerId);
+}
+
+function disposeGameScene() {
+  for (const peerId of Array.from(remotePlayers.keys())) {
+    removeRemotePlayerEntity(peerId);
+  }
+  remotePlayers.clear();
+
+  if (gameState.localRig) {
+    if (scene) scene.remove(gameState.localRig.group);
+    gameState.localRig.dispose();
+    gameState.localRig = null;
+  }
+  gameState.lightPool = [];
+  scene = null;
+  camera = null;
+}
+
+function leaveGameAndReturnToMenu() {
+  gameState.inGame = false;
+  gameState.enteredFirstPerson = false;
+  clearMovementKeys();
+  cleanupNetwork();
+  disposeGameScene();
+
+  if (localRawMicStream) {
+    localRawMicStream.getTracks().forEach(t => t.stop());
+    localRawMicStream = null;
+    micPermissionGranted = false;
+    $('enable-mic-btn').style.display = 'block';
+    $('mic-select').style.display = 'none';
+    updateMicHUDIcon();
+  }
+
+  $('hud').style.display = 'none';
+  $('click-to-enter').style.display = 'none';
+  $('esc-menu').style.display = 'none';
+  $('host-pause-overlay').style.display = 'none';
+  $('host-left-overlay').style.display = 'none';
+  $('main-menu').style.display = 'flex';
+  openMenuPanel(null);
+  startMenuMusic();
+}
+
+// ============================================================================
+// 10. POINTER LOCK, INPUT, CHAT & HUD
+// ============================================================================
+const keys = {};
+let chatFocused = false;
+let lastChatSendTime = 0;
+
+function clearMovementKeys() {
+  for (const k in keys) keys[k] = false;
+}
+
+// Synchronous pointer lock request on real user gesture
+function requestCanvasPointerLock() {
+  ensureAudioContext();
+  try {
+    const p = canvas.requestPointerLock();
+    if (p && typeof p.catch === 'function') p.catch(() => {});
+  } catch {}
+}
+
+$('click-to-enter').addEventListener('click', () => {
+  requestCanvasPointerLock();
+});
+
+$('esc-continue-btn').addEventListener('click', () => {
+  requestCanvasPointerLock();
+});
+
+$('esc-settings-btn').addEventListener('click', () => {
+  settingsOpenedFromEsc = true;
+  $('esc-menu').style.display = 'none';
+  $('main-menu').style.display = 'flex';
+  openMenuPanel('settings');
+});
+
+document.addEventListener('pointerlockchange', () => {
+  if (!gameState.inGame) return;
+  const locked = document.pointerLockElement === canvas;
+  if (locked) {
+    gameState.enteredFirstPerson = true;
+    $('click-to-enter').style.display = 'none';
+    $('esc-menu').style.display = 'none';
+    if (settingsOpenedFromEsc) {
+      $('main-menu').style.display = 'none';
+      settingsOpenedFromEsc = false;
+    }
+  } else {
+    clearMovementKeys();
+    if (!netState.hostLeavingTriggered && !netState.hostPaused) {
+      if (gameState.enteredFirstPerson) {
+        $('esc-menu').style.display = 'flex';
+      } else {
+        $('click-to-enter').style.display = 'flex';
+      }
+    }
+  }
+});
+
+document.addEventListener('pointerlockerror', () => {
+  if (!gameState.inGame || netState.hostLeavingTriggered) return;
+  // Keep Continue / Click to enter visible so the next click retries cleanly
+  if (gameState.enteredFirstPerson) {
+    $('esc-menu').style.display = 'flex';
+  } else {
+    $('click-to-enter').style.display = 'flex';
+  }
+});
+
+// Prevent context menu & browser scrolling during play
+window.addEventListener('contextmenu', e => {
+  if (gameState.inGame) e.preventDefault();
+});
+
+const chatInput = $('chat-input');
+chatInput.addEventListener('focus', () => {
+  chatFocused = true;
+  clearMovementKeys();
+});
+chatInput.addEventListener('blur', () => {
+  chatFocused = false;
+});
+
+window.addEventListener('keydown', e => {
+  if (!gameState.inGame) return;
+  if (netState.hostPaused || netState.hostLeavingTriggered) {
+    e.preventDefault();
+    return;
+  }
+
+  // Enter toggles chat focus without unlocking pointer
+  if (e.code === 'Enter') {
+    e.preventDefault();
+    if (document.activeElement === chatInput) {
+      const raw = chatInput.value.slice(0, 100).trim();
+      const now = performance.now();
+      if (raw.length > 0 && now - lastChatSendTime >= 500) {
+        lastChatSendTime = now;
+        addChatMessage(netState.myName, raw);
+        broadcastReliable({ t: 'chat', name: netState.myName, text: raw });
+      }
+      chatInput.value = '';
+      chatInput.blur();
+    } else {
+      chatInput.focus();
+    }
+    return;
+  }
+
+  if (chatFocused || document.activeElement === chatInput) return;
+
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+    e.preventDefault();
+  }
+  keys[e.code] = true;
+});
+
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+});
+
+window.addEventListener('mousemove', e => {
+  if (!gameState.inGame || netState.hostPaused || netState.hostLeavingTriggered) return;
+  if (document.pointerLockElement !== canvas) return;
+  player.yaw = wrapAngle(player.yaw - e.movementX * 0.0022);
+  player.pitch = clamp(player.pitch - e.movementY * 0.0022, -0.95, 0.87);
+});
+
+function addChatMessage(name, text) {
+  const container = $('chat-messages');
+  const line = document.createElement('div');
+  line.className = 'chat-line';
+  // Strictly rendered with textContent
+  line.textContent = `${name}: ${text.slice(0, 100)}`;
+  container.appendChild(line);
+
+  while (container.children.length > 6) {
+    container.removeChild(container.firstChild);
+  }
+
+  setTimeout(() => {
+    line.style.opacity = '0';
+    setTimeout(() => { if (line.parentNode) line.remove(); }, 500);
+  }, 10000);
+}
+
+function addLeftGameLog(text) {
+  const container = $('left-game-log');
+  const line = document.createElement('div');
+  line.className = 'left-log-line';
+  line.textContent = text;
+  container.appendChild(line);
+
+  while (container.children.length > 5) {
+    container.removeChild(container.firstChild);
+  }
+
+  setTimeout(() => {
+    line.style.opacity = '0';
+    setTimeout(() => { if (line.parentNode) line.remove(); }, 500);
+  }, 8000);
+}
+
+// ============================================================================
+// 11. LOCAL PLAYER PHYSICS, BVH CAPSULE SHAPECAST & REMOTE INTERPOLATION
+// ============================================================================
+const _downRay = new THREE.Raycaster();
+_downRay.firstHitOnly = true;
+const _upRay = new THREE.Raycaster();
+_upRay.firstHitOnly = true;
+const _vDown = new THREE.Vector3(0, -1, 0);
+const _vUp = new THREE.Vector3(0, 1, 0);
+const _rayOrigin = new THREE.Vector3();
+const _capBox = new THREE.Box3();
+const _capSeg = new THREE.Line3();
+const _cTriPt = new THREE.Vector3();
+const _cSegPt = new THREE.Vector3();
+const _cDelta = new THREE.Vector3();
+const _triNorm = new THREE.Vector3();
+
+function resolveHorizontalCapsuleBVH(bvh, x, y, z, radius, height) {
+  let px = x, pz = z;
+  // Elevate bottom of horizontal wall-collision segment by STEP_UP_MAX so floor & baseboards don't block horizontal motion
+  const segBottom = y + Math.max(radius, STEP_UP_MAX + 0.05);
+  const segTop = y + height - radius;
+
+  for (let iter = 0; iter < 3; iter++) {
+    _capSeg.start.set(px, segBottom, pz);
+    _capSeg.end.set(px, Math.max(segBottom + 0.05, segTop), pz);
+    _capBox.min.set(px - radius, y + STEP_UP_MAX, pz - radius);
+    _capBox.max.set(px + radius, y + height, pz + radius);
+
+    bvh.shapecast({
+      intersectsBounds: box => box.intersectsBox(_capBox),
+      intersectsTriangle: tri => {
+        tri.getNormal(_triNorm);
+        // Ignore horizontal floor/ceiling faces during horizontal wall resolution
+        if (Math.abs(_triNorm.y) > 0.65) return false;
+        tri.closestPointToSegment(_capSeg, _cTriPt, _cSegPt);
+        _cDelta.subVectors(_cSegPt, _cTriPt);
+        _cDelta.y = 0; // Resolve strictly in XZ plane so player cannot climb walls
+        const d = _cDelta.length();
+        if (d < radius && d > 1e-6) {
+          const push = (radius - d) / d;
+          px += _cDelta.x * push;
+          pz += _cDelta.z * push;
+          _capSeg.start.x = px; _capSeg.start.z = pz;
+          _capSeg.end.x = px; _capSeg.end.z = pz;
+        }
+        return false;
+      }
+    });
+  }
+  return { x: px, z: pz };
+}
+
+function sampleFloorAndCeiling(x, y, z) {
+  let groundY = y;
+  let ceilingY = y + 2.7;
+  if (!gameState.bvhMesh) return { groundY, ceilingY };
+
+  // Downward raycast from head height so the ceiling is never hit
+  const rayStartY = y + 1.45;
+  _rayOrigin.set(x, rayStartY, z);
+  _downRay.set(_rayOrigin, _vDown);
+  _downRay.near = 0;
+  _downRay.far = 4.0;
+  const dHits = _downRay.intersectObject(gameState.bvhMesh, false);
+  for (const h of dHits) {
+    // Accept floor/step hits up to STEP_UP_MAX (0.30m) above current feet
+    if (h.point.y <= y + STEP_UP_MAX + 0.04) {
+      groundY = h.point.y;
+      break;
+    }
+  }
+
+  // Upward raycast for ceiling collision
+  _rayOrigin.set(x, groundY + 0.9, z);
+  _upRay.set(_rayOrigin, _vUp);
+  _upRay.near = 0;
+  _upRay.far = 4.0;
+  const uHits = _upRay.intersectObject(gameState.bvhMesh, false);
+  for (const h of uHits) {
+    if (h.point.y > groundY + 1.1) {
+      ceilingY = h.point.y;
+      break;
+    }
+  }
+
+  return { groundY, ceilingY };
+}
+
+function stepLocalPlayer(dt) {
+  if (!gameState.bvh) return;
+
+  const wantCrouch = !!keys.KeyC && !player.jumping;
+  const { groundY: curGround, ceilingY: curCeil } = sampleFloorAndCeiling(player.x, player.groundY, player.z);
+
+  // Only uncrouch if there is 1.8m headroom
+  if (wantCrouch) {
+    player.crouch = true;
+  } else if (player.crouch && (curCeil - curGround >= STAND_HEIGHT + 0.05)) {
+    player.crouch = false;
+  }
+
+  const capHeight = player.crouch ? CROUCH_HEIGHT : STAND_HEIGHT;
+
+  const wDown = !!keys.KeyW;
+  const sDown = !!keys.KeyS;
+  const aDown = !!keys.KeyA;
+  const dDown = !!keys.KeyD;
+  const shiftDown = !!(keys.ShiftLeft || keys.ShiftRight);
+  const spaceDown = ENABLE_JUMP && !!keys.Space;
+
+  const fwdInput = (wDown ? 1 : 0) - (sDown ? 1 : 0);
+  const strInput = (dDown ? 1 : 0) - (aDown ? 1 : 0);
+  const hasMoveInput = fwdInput !== 0 || strInput !== 0;
+
+  // Trigger Jump on Space if grounded and not crouched
+  if (spaceDown && !player.jumping && !player.crouch) {
+    player.jumping = true;
+    player.jumpT = 0;
+    if (wDown && !sDown) {
+      // Forward jump (running jump or walking jump; direction & speed locked in air)
+      const isRun = shiftDown;
+      player.jumpType = isRun ? 'hoprun' : 'hopwalk';
+      player.jumpH = isRun ? RUN_JUMP_HEIGHT : WALK_JUMP_HEIGHT;
+      player.jumpDur = 2 * Math.sqrt((2 * player.jumpH) / 9.8);
+      player.jumpVel = (isRun ? RUN_SPEED : WALK_SPEED) * JUMP_FORWARD_MULT;
+      const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+      const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+      const dx = fx * fwdInput + rx * strInput;
+      const dz = fz * fwdInput + rz * strInput;
+      player.jumpYaw = Math.atan2(-dx, -dz);
+    } else {
+      // Standing jump (or backward/sideways in-place hop; no running-backward jump)
+      player.jumpType = 'jumpin';
+      player.jumpH = STAND_JUMP_HEIGHT;
+      player.jumpDur = 2 * Math.sqrt((2 * player.jumpH) / 9.8);
+      player.jumpVel = hasMoveInput ? WALK_SPEED * 0.5 : 0;
+      const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+      const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+      const dx = fx * fwdInput + rx * strInput;
+      const dz = fz * fwdInput + rz * strInput;
+      player.jumpYaw = hasMoveInput ? Math.atan2(-dx, -dz) : player.yaw;
+    }
+  }
+
+  let vx = 0, vz = 0;
+  if (player.jumping) {
+    player.jumpT += dt;
+    let u = player.jumpT / player.jumpDur;
+    if (u >= 1.0) {
+      player.jumping = false;
+      player.jumpArcY = 0;
+      player.jp = 0;
+    } else {
+      player.jp = u;
+      player.jumpArcY = 4 * player.jumpH * u * (1 - u);
+      const jfx = -Math.sin(player.jumpYaw);
+      const jfz = -Math.cos(player.jumpYaw);
+      vx = jfx * player.jumpVel;
+      vz = jfz * player.jumpVel;
+      player.state = player.jumpType;
+      player.speed = player.jumpVel;
+    }
+  }
+
+  if (!player.jumping) {
+    const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+    const rx = Math.cos(player.yaw), rz = -Math.sin(player.yaw);
+    let moveX = fx * fwdInput + rx * strInput;
+    let moveZ = fz * fwdInput + rz * strInput;
+    const len = Math.hypot(moveX, moveZ);
+    if (len > 0) {
+      moveX /= len;
+      moveZ /= len;
+      if (player.crouch) {
+        player.speed = CROUCH_SPEED;
+        player.state = 'crouchwalk';
+      } else if (fwdInput > 0 && shiftDown) {
+        player.speed = RUN_SPEED;
+        player.state = 'run';
+      } else if (fwdInput < 0) {
+        player.speed = WALK_SPEED;
+        player.state = 'back';
+      } else if (fwdInput === 0 && strInput !== 0) {
+        player.speed = WALK_SPEED;
+        player.state = 'strafe';
+      } else {
+        player.speed = WALK_SPEED;
+        player.state = 'walk';
+      }
+      vx = moveX * player.speed;
+      vz = moveZ * player.speed;
+    } else {
+      player.speed = 0;
+      player.state = player.crouch ? 'crouch' : 'idle';
+    }
+  }
+
+  // Sub-stepped horizontal movement + BVH capsule collision so fast run-jumps never tunnel through thin walls
+  const disp = Math.hypot(vx * dt, vz * dt);
+  const subSteps = Math.max(2, Math.ceil(disp / 0.06));
+  const subDt = dt / subSteps;
+
+  for (let s = 0; s < subSteps; s++) {
+    const nextX = player.x + vx * subDt;
+    const nextZ = player.z + vz * subDt;
+    const res = resolveHorizontalCapsuleBVH(
+      gameState.bvh,
+      nextX,
+      player.groundY + player.jumpArcY,
+      nextZ,
+      CAPSULE_RADIUS,
+      capHeight
+    );
+    player.x = res.x;
+    player.z = res.z;
+  }
+
+  // Re-sample exact floor & ceiling at resolved position
+  const { groundY, ceilingY } = sampleFloorAndCeiling(player.x, player.groundY, player.z);
+  const diffG = groundY - player.groundY;
+  if (Math.abs(diffG) < 0.02) {
+    player.groundY = groundY;
+  } else {
+    player.groundY += diffG * Math.min(1, dt * 22);
+  }
+
+  // Ceiling collision during jumps
+  const maxJumpArc = Math.max(0, ceilingY - capHeight - player.groundY - 0.02);
+  if (player.jumping && player.jumpArcY > maxJumpArc) {
+    player.jumpArcY = maxJumpArc;
+    // Reflect upward phase into downward fall
+    if (player.jp < 0.5) {
+      player.jumpT = (1.0 - player.jp) * player.jumpDur;
+    }
+  }
+
+  player.y = player.groundY + player.jumpArcY;
+
+  // Safety respawn if player ever falls below the map
+  if (player.y < -3.0 && assetCache.mapTemplate) {
+    const sp = assetCache.mapTemplate.spawn;
+    player.x = sp.x;
+    player.y = sp.y;
+    player.groundY = sp.y;
+    player.z = sp.z;
+    player.jumping = false;
+    player.jumpArcY = 0;
+  }
+
+  // Smooth eye height and position camera at head with subtle handheld VHS camcorder sway
+  const targetEye = player.crouch ? EYE_CROUCH : EYE_STAND;
+  player.eye += (targetEye - player.eye) * Math.min(1, dt * 10);
+
+  const tSec = performance.now() * 0.001;
+  const moveFactor = clamp(player.speed / RUN_SPEED, 0, 1);
+  const bobFreq = player.state === 'run' ? 11.0 : 7.0;
+  const camBobY = Math.sin(tSec * bobFreq) * 0.022 * moveFactor + Math.sin(tSec * 1.6) * 0.004;
+  const camRoll = Math.cos(tSec * bobFreq * 0.5) * 0.012 * moveFactor + Math.sin(tSec * 1.1) * 0.003;
+
+  camera.position.set(player.x, player.y + player.eye + camBobY, player.z);
+  camera.rotation.set(player.pitch, player.yaw, camRoll);
+
+  // Update local body model (kept at feet = capsule bottom, hidden from local camera)
+  if (gameState.localRig) {
+    gameState.localRig.group.position.set(player.x, player.y, player.z);
+    gameState.localRig.update(dt, player.state, player.speed, player.pitch, player.yaw, player.jp);
+  }
+
+  // Send 20 Hz unreliable position packet
+  const now = performance.now();
+  if (now - gameState.lastNetSend >= 50) {
+    gameState.lastNetSend = now;
+    broadcastUnreliable({
+      t: 'pos',
+      x: +player.x.toFixed(3),
+      y: +player.y.toFixed(3),
+      z: +player.z.toFixed(3),
+      yaw: +player.yaw.toFixed(3),
+      pitch: +player.pitch.toFixed(3),
+      state: player.state,
+      crouch: player.crouch ? 1 : 0,
+      jp: +player.jp.toFixed(3)
+    });
+  }
+}
+
+// Receive remote position packet & store in interpolation buffer
+function onRemotePositionPacket(peerId, pkt) {
+  if (!gameState.inGame) return;
+  const member = netState.roster.find(r => r.id === peerId);
+  const name = member ? member.name : 'player';
+  const rPlayer = ensureRemotePlayerEntity(peerId, name, pkt);
+
+  const now = performance.now();
+  rPlayer.snapshots.push({
+    t: now,
+    x: Number(pkt.x) || 0,
+    y: Number(pkt.y) || 0,
+    z: Number(pkt.z) || 0,
+    yaw: Number(pkt.yaw) || 0,
+    pitch: Number(pkt.pitch) || 0,
+    state: pkt.state || 'idle',
+    crouch: !!pkt.crouch,
+    jp: Number(pkt.jp) || 0
+  });
+  while (rPlayer.snapshots.length > 12) {
+    rPlayer.snapshots.shift();
+  }
+}
+
+// Interpolate remote players ~100ms behind and drive their animation & leap poses
+function updateRemotePlayers(dt) {
+  const renderTime = performance.now() - 100;
+
+  for (const rPlayer of remotePlayers.values()) {
+    const snaps = rPlayer.snapshots;
+    if (snaps.length > 0) {
+      let s0 = snaps[0], s1 = snaps[snaps.length - 1];
+      for (let i = 0; i < snaps.length - 1; i++) {
+        if (snaps[i].t <= renderTime && snaps[i + 1].t >= renderTime) {
+          s0 = snaps[i];
+          s1 = snaps[i + 1];
+          break;
+        }
+      }
+
+      const span = s1.t - s0.t;
+      const alpha = span > 1e-3 ? clamp((renderTime - s0.t) / span, 0, 1) : 1;
+
+      const tx = s0.x + (s1.x - s0.x) * alpha;
+      const ty = s0.y + (s1.y - s0.y) * alpha;
+      const tz = s0.z + (s1.z - s0.z) * alpha;
+      const dyaw = wrapAngle(s1.yaw - s0.yaw);
+      const tyaw = wrapAngle(s0.yaw + dyaw * alpha);
+      const tpitch = s0.pitch + (s1.pitch - s0.pitch) * alpha;
+
+      const moveDist = Math.hypot(tx - rPlayer.pos.x, tz - rPlayer.pos.z);
+      const estSpeed = dt > 0 ? moveDist / dt : 0;
+
+      rPlayer.pos.set(tx, ty, tz);
+      rPlayer.yaw = tyaw;
+      rPlayer.pitch = tpitch;
+      rPlayer.state = s1.state;
+      rPlayer.crouch = s1.crouch;
+      rPlayer.jp = s0.jp <= s1.jp ? (s0.jp + (s1.jp - s0.jp) * alpha) : s1.jp;
+
+      // Exact ground alignment check when remote player is not mid-jump
+      let finalY = rPlayer.pos.y;
+      if (rPlayer.state !== 'hoprun' && rPlayer.state !== 'hopwalk' && rPlayer.state !== 'jumpin') {
+        const { groundY } = sampleFloorAndCeiling(rPlayer.pos.x, rPlayer.pos.y, rPlayer.pos.z);
+        finalY = groundY;
+        rPlayer.pos.y = groundY;
+      }
+
+      rPlayer.rig.group.position.set(rPlayer.pos.x, finalY, rPlayer.pos.z);
+      rPlayer.nameTag.sprite.position.y = (rPlayer.crouch ? CROUCH_HEIGHT : STAND_HEIGHT) + 0.18;
+      rPlayer.rig.update(dt, rPlayer.state, estSpeed, rPlayer.pitch, rPlayer.yaw, rPlayer.jp);
+    } else {
+      rPlayer.rig.update(dt, 'idle', 0, 0, rPlayer.yaw, 0);
+    }
+  }
+}
+
+// ============================================================================
+// 12. MAIN RENDER LOOP
+// ============================================================================
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (DEBUG_ENABLED) {
+    gameState.fpsFrames++;
+    gameState.fpsTime += dt;
+    if (gameState.fpsTime >= 0.5) {
+      gameState.fpsValue = Math.round(gameState.fpsFrames / gameState.fpsTime);
+      gameState.fpsFrames = 0;
+      gameState.fpsTime = 0;
+      const pCount = assetCache.mapTemplate ? assetCache.mapTemplate.ceilingPanels.length : 0;
+      $('debug-box').textContent = `FPS: ${gameState.fpsValue}\nCeiling Panels: ${pCount}`;
+    }
+  }
+
+  // Voice chat always runs (even when host switches tabs)
+  updateVoiceChatFrame();
+
+  if (gameState.inGame && scene && camera) {
+    if (!netState.hostPaused && !netState.hostLeavingTriggered) {
+      stepLocalPlayer(dt);
+      updateRemotePlayers(dt);
+      updateCeilingLightPool(dt);
+      vhsMaterial.uniforms.uTime.value += dt;
+    }
+    renderer.setRenderTarget(vhsTarget);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(vhsScene, vhsCamera);
+  }
+});
+
+// Start preloading assets immediately as soon as the main menu opens
+preloadAssets();
+</script>
+</body>
+</html>
