@@ -657,42 +657,17 @@ function parseGLB(buffer) {
 
 async function preloadAssets() {
   if (assetCache.loaded) return;
-  let mapProg = 0, charProg = 0;
-  const updateUI = () => {
-    const pct = Math.min(99, Math.round(((mapProg + charProg) / 2) * 100));
-    $('asset-status-text').textContent = `Preloading assets... ${pct}%`;
-    $('asset-bar-fill').style.width = `${pct}%`;
-  };
-
-  let currentFile = 'backrooms v2.glb';
+  const updateUI = p => { const pct = Math.min(99, Math.round(p * 100)); $('asset-status-text').textContent = `Preloading assets... ${pct}%`; $('asset-bar-fill').style.width = `${pct}%`; };
+  let currentFile = 'hazmat-player-model.glb';
   try {
-    const mapPromise = (async () => {
-      try {
-        return await fetchWithProgress(MAP_URL, (l, t) => { mapProg = t ? l / t : 0.5; updateUI(); });
-      } catch (e) {
-        currentFile = MAP_URL_FALLBACK;
-        return await fetchWithProgress(MAP_URL_FALLBACK, (l, t) => { mapProg = t ? l / t : 0.5; updateUI(); });
-      }
-    })();
-
-    const charPromise = (async () => {
-      return await fetchWithProgress(CHAR_URL, (l, t) => { charProg = t ? l / t : 0.5; updateUI(); });
-    })();
-
-    const [mapBuf, charBuf] = await Promise.all([mapPromise, charPromise]);
-    assetCache.mapBuffer = mapBuf;
+    const charBuf = await fetchWithProgress(CHAR_URL, (l, t) => updateUI((t ? l / t : 0.5) * 0.8));
     assetCache.charBuffer = charBuf;
-
-    $('asset-status-text').textContent = 'Processing geometry & BVH...';
-    currentFile = 'hazmat-player-model.glb';
+    $('asset-status-text').textContent = 'Building map...';
     assetCache.charGltf = await parseGLB(charBuf);
-
-    currentFile = 'backrooms v2.glb';
-    const rawMapGltf = await parseGLB(mapBuf);
-    assetCache.mapTemplate = await buildMapTemplate(rawMapGltf);
-
+    currentFile = 'map textures';
+    assetCache.mapTemplate = await buildMapTemplate();
     assetCache.loaded = true;
-    $('asset-status-text').textContent = `Assets ready (${assetCache.mapTemplate.ceilingPanels.length} lights)`;
+    $('asset-status-text').textContent = 'Assets ready';
     $('asset-bar-fill').style.width = '100%';
     onLocalAssetsReady();
   } catch (err) {
@@ -1654,6 +1629,7 @@ function setupDataConnection(conn, remoteId, isInitialJoinToHost, onJoinReject, 
 
       case 'start': {
         netState.roster = msg.roster || netState.roster;
+        netState.seed = msg.seed | 0;
         enterGameSession();
         break;
       }
@@ -1662,6 +1638,9 @@ function setupDataConnection(conn, remoteId, isInitialJoinToHost, onJoinReject, 
         onRemotePositionPacket(remoteId, msg);
         break;
       }
+
+      case 'act': { if (netState.isHost && OBJ) { msg.from = remoteId; hostAct(msg); } break; }
+      case 'ev': { if (remoteId === netState.hostId) applyEv(msg.ev); break; }
 
       case 'chat': {
         const sender = netState.roster.find(r => r.id === remoteId);
@@ -1736,6 +1715,7 @@ function onPeerConnectionClosed(remoteId) {
 }
 
 function handlePeerLeft(peerId, fallbackName) {
+  try { objPeerLeft(peerId); } catch (e) {}
   const idx = netState.roster.findIndex(r => r.id === peerId);
   const name = idx >= 0 ? netState.roster[idx].name : fallbackName;
   if (idx >= 0) netState.roster.splice(idx, 1);
@@ -1770,7 +1750,8 @@ $('start-game-btn').addEventListener('click', () => {
 
   netState.gameStarted = true;
   netState.roster.forEach((p, idx) => { p.spawnIndex = idx; });
-  broadcastReliable({ t: 'start', roster: netState.roster });
+  netState.seed = (Math.random() * 2147483647) | 0;
+  broadcastReliable({ t: 'start', roster: netState.roster, seed: netState.seed });
   enterGameSession();
 });
 
@@ -1829,214 +1810,6 @@ function triggerHostLeftSequence() {
 // 7. MAP PROCESSING, BVH COLLISION, CEILING LIGHTS & DETERMINISTIC SPAWN
 // ============================================================================
 const nextFrame = () => new Promise(resolve => setTimeout(resolve, 0));
-
-async function buildMapTemplate(gltf) {
-  const root = gltf.scene;
-  root.updateMatrixWorld(true);
-
-  // 1. Identify and hide stray objects sitting above the ceiling (e.g. Cube.002 at y=17.94)
-  const meshes = [];
-  let shellBox = null;
-  root.traverse(obj => {
-    if (!obj.isMesh || !obj.geometry) return;
-    const box = new THREE.Box3().setFromObject(obj);
-    if (box.min.y > 10.8 || obj.name === 'Cube.002') {
-      obj.visible = false;
-      return;
-    }
-    if (obj.name === 'Cube') shellBox = box;
-    meshes.push(obj);
-  });
-
-  await nextFrame();
-
-  // 2. Measure unscaled floor-to-ceiling height deterministically (using shell box + fast ray verification)
-  let rawFloorY = shellBox ? shellBox.min.y : 0.149;
-  let rawCeilY = shellBox ? shellBox.max.y : 8.807;
-  let rawHeight = rawCeilY - rawFloorY;
-  if (rawHeight < 5.0 || rawHeight > 12.0) {
-    rawFloorY = 0.149;
-    rawCeilY = 8.807;
-    rawHeight = rawCeilY - rawFloorY;
-  }
-
-  const mapScale = MAP_SCALE_OVERRIDE !== null ? MAP_SCALE_OVERRIDE : (2.7 / rawHeight);
-  const yOffsetMeters = -rawFloorY * mapScale;
-
-  // Scale transform matrix that scales by mapScale and aligns floor top to y = 0
-  const scaleMat = new THREE.Matrix4().makeScale(mapScale, mapScale, mapScale);
-  scaleMat.setPosition(0, yOffsetMeters, 0);
-
-  // 3. Extract primitives per material, fix negative-scale winding, and collect ceiling triangles
-  const materialMap = new Map();
-  const collisionGeos = [];
-  const ceilingTriangles = [];
-
-  for (const mesh of meshes) {
-    const worldMat = new THREE.Matrix4().multiplyMatrices(scaleMat, mesh.matrixWorld);
-    const negDet = worldMat.determinant() < 0;
-    const srcGeo = mesh.geometry;
-    const matList = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    const groups = (srcGeo.groups && srcGeo.groups.length > 0 && Array.isArray(mesh.material))
-      ? srcGeo.groups
-      : [{ start: 0, count: Infinity, materialIndex: 0 }];
-
-    for (const grp of groups) {
-      const mat = matList[grp.materialIndex] || matList[0];
-      if (!mat) continue;
-
-      let subGeo = srcGeo.clone();
-      if (grp.count !== Infinity && subGeo.index) {
-        const subIdx = subGeo.index.array.slice(grp.start, grp.start + grp.count);
-        subGeo.setIndex(new THREE.BufferAttribute(subIdx, 1));
-      }
-      subGeo = subGeo.toNonIndexed();
-      subGeo.applyMatrix4(worldMat);
-
-      if (negDet) {
-        const posAttr = subGeo.attributes.position;
-        const normAttr = subGeo.attributes.normal;
-        const uvAttr = subGeo.attributes.uv;
-        for (let i = 0; i < posAttr.count; i += 3) {
-          for (const attr of [posAttr, normAttr, uvAttr]) {
-            if (!attr) continue;
-            const itemSize = attr.itemSize;
-            for (let k = 0; k < itemSize; k++) {
-              const tmp = attr.array[(i + 1) * itemSize + k];
-              attr.array[(i + 1) * itemSize + k] = attr.array[(i + 2) * itemSize + k];
-              attr.array[(i + 2) * itemSize + k] = tmp;
-            }
-          }
-        }
-        if (normAttr) {
-          for (let i = 0; i < normAttr.array.length; i++) {
-            normAttr.array[i] = -normAttr.array[i];
-          }
-        }
-      }
-
-      const cleanGeo = new THREE.BufferGeometry();
-      cleanGeo.setAttribute('position', subGeo.attributes.position);
-      if (subGeo.attributes.normal) {
-        cleanGeo.setAttribute('normal', subGeo.attributes.normal);
-      } else {
-        cleanGeo.computeVertexNormals();
-      }
-      if (subGeo.attributes.uv) {
-        cleanGeo.setAttribute('uv', subGeo.attributes.uv);
-      } else {
-        cleanGeo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(subGeo.attributes.position.count * 2), 2));
-      }
-
-      cleanGeo.computeBoundingBox();
-      const center = new THREE.Vector3();
-      cleanGeo.boundingBox.getCenter(center);
-
-      const cx = Math.floor(center.x / 40);
-      const cz = Math.floor(center.z / 40);
-      const chunkKey = `${cx}_${cz}`;
-
-      if (!materialMap.has(mat.uuid)) {
-        materialMap.set(mat.uuid, { mat, chunks: new Map() });
-      }
-      const bucket = materialMap.get(mat.uuid);
-      if (!bucket.chunks.has(chunkKey)) bucket.chunks.set(chunkKey, []);
-      bucket.chunks.get(chunkKey).push(cleanGeo);
-
-      const posOnly = new THREE.BufferGeometry();
-      posOnly.setAttribute('position', subGeo.attributes.position.clone());
-      collisionGeos.push(posOnly);
-
-      const isCeilingMat = (mat.name && /ceiling/i.test(mat.name)) || !!mat.emissiveMap;
-      if (isCeilingMat && subGeo.attributes.uv) {
-        const pArr = subGeo.attributes.position.array;
-        const uArr = subGeo.attributes.uv.array;
-        for (let i = 0; i < subGeo.attributes.position.count; i += 3) {
-          const p0 = new THREE.Vector3(pArr[i * 3], pArr[i * 3 + 1], pArr[i * 3 + 2]);
-          const p1 = new THREE.Vector3(pArr[(i + 1) * 3], pArr[(i + 1) * 3 + 1], pArr[(i + 1) * 3 + 2]);
-          const p2 = new THREE.Vector3(pArr[(i + 2) * 3], pArr[(i + 2) * 3 + 1], pArr[(i + 2) * 3 + 2]);
-          if (p0.y > 2.0 && p1.y > 2.0 && p2.y > 2.0 && Math.abs(p0.y - p1.y) < 0.2 && Math.abs(p0.y - p2.y) < 0.2) {
-            const uv0 = new THREE.Vector2(uArr[i * 2], uArr[i * 2 + 1]);
-            const uv1 = new THREE.Vector2(uArr[(i + 1) * 2], uArr[(i + 1) * 2 + 1]);
-            const uv2 = new THREE.Vector2(uArr[(i + 2) * 2], uArr[(i + 2) * 2 + 1]);
-            ceilingTriangles.push({ p0, p1, p2, uv0, uv1, uv2, mat });
-          }
-        }
-      }
-    }
-  }
-
-  await nextFrame();
-
-  // 4. Merge visual spatial chunks per material
-  const chunkEntries = [];
-  for (const { mat, chunks } of materialMap.values()) {
-    mat.side = THREE.DoubleSide;
-    if ((mat.name && /ceiling/i.test(mat.name)) || mat.emissiveMap) {
-      mat.emissive = new THREE.Color(0xffffff);
-      if (mat.emissiveMap) {
-        mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-      }
-      const extStrength = mat.userData?.gltfExtensions?.KHR_materials_emissive_strength?.emissiveStrength;
-      mat.emissiveIntensity = Math.max(extStrength || mat.emissiveIntensity || 1.0, 2.2);
-    }
-    for (const geoList of chunks.values()) {
-      const merged = BufferGeometryUtils.mergeGeometries(geoList, false);
-      merged.computeBoundingBox();
-      merged.computeBoundingSphere();
-      chunkEntries.push({ geometry: merged, material: mat });
-    }
-  }
-
-  await nextFrame();
-
-  // 5. Build unified position-only collision geometry & three-mesh-bvh tree
-  // CRITICAL: Use THREE.DoubleSide and acceleratedRaycast so interior shell faces are hit in O(log N)
-  const mergedCollisionGeo = BufferGeometryUtils.mergeGeometries(collisionGeos, false);
-  const bvh = new MeshBVH(mergedCollisionGeo, { lazyGeneration: false });
-  mergedCollisionGeo.boundsTree = bvh;
-  const bvhMesh = new THREE.Mesh(
-    mergedCollisionGeo,
-    new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })
-  );
-  bvhMesh.raycast = acceleratedRaycast;
-
-  // Verify floor-to-ceiling height via BVH raycasts and log
-  const verifyRay = new THREE.Raycaster();
-  verifyRay.set(new THREE.Vector3(0, 1.35, 0), new THREE.Vector3(0, -1, 0));
-  const vfHit = verifyRay.intersectObject(bvhMesh, false)[0];
-  verifyRay.set(new THREE.Vector3(0, 1.35, 0), new THREE.Vector3(0, 1, 0));
-  const vcHit = verifyRay.intersectObject(bvhMesh, false)[0];
-  console.log(
-    '[MAP] Unscaled floorY:', rawFloorY.toFixed(4),
-    'ceilY:', rawCeilY.toFixed(4),
-    'MAP_SCALE:', mapScale.toFixed(6),
-    'Verified scaled floor/ceil:', vfHit?.point.y.toFixed(3), vcHit?.point.y.toFixed(3)
-  );
-
-  await nextFrame();
-
-  // 6. Detect ceiling light panels from the ceiling emissive texture in UV space
-  const ceilingPanels = detectCeilingLightPanels(ceilingTriangles);
-  console.log('[LIGHTS] Enumerated ceiling light panels:', ceilingPanels.length);
-
-  await nextFrame();
-
-  // 7. Find deterministic SPAWN and 4 collision-free player offsets using accelerated BVH raycasts
-  const { spawn, spawnOffsets } = computeDeterministicSpawn(bvhMesh, bvh);
-  console.log('[SPAWN] Deterministic SPAWN:', spawn, 'Player offsets:', spawnOffsets);
-
-  return {
-    mapScale,
-    chunkEntries,
-    collisionGeo: mergedCollisionGeo,
-    bvh,
-    bvhMesh,
-    ceilingPanels,
-    spawn,
-    spawnOffsets
-  };
-}
 
 function detectCeilingLightPanels(ceilingTriangles) {
   if (ceilingTriangles.length === 0) return [];
@@ -2836,6 +2609,7 @@ function enterGameSession() {
   gameState.bvhMesh = tpl.bvhMesh;
   gameState.ceilingPanels = tpl.ceilingPanels;
   gameState.lightPool = createDynamicLightPool(scene);
+  initObjectives();
 
   // Determine deterministic spawn slot from roster order
   const meInRoster = netState.roster.find(r => r.id === netState.myId);
@@ -3491,6 +3265,291 @@ function updateRemotePlayers(dt) {
 // ============================================================================
 // 12. MAIN RENDER LOOP
 // ============================================================================
+// ============================================================================
+// 11b. FIXED MAP + OBJECTIVES (new)
+// ============================================================================
+// ---- PURE: fixed layout + quad generation (no THREE) ----
+const CS = 3, GN = 60, WALL_H = 2.7, VENT_H = 1.05;
+function makeLayout() {
+  const g = []; for (let z = 0; z < GN; z++) g.push(new Array(GN).fill(0)); // 0 solid, 1 open, 2 vent (crouch only), 3 door cell
+  const carve = (x0, z0, x1, z1, v = 1) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) g[z][x] = v; };
+  const zone = { start: [24, 44, 33, 50], paper: [4, 8, 10, 13], vault: [54, 40, 58, 45], cab: [27, 1, 28, 2] };
+  carve(24, 44, 33, 50); carve(27, 47, 27, 47, 0); carve(30, 47, 30, 47, 0);            // start room + 2 pillars
+  carve(28, 30, 28, 43); carve(12, 47, 23, 47); carve(34, 47, 50, 47);                 // halls from start
+  carve(24, 52, 32, 57); carve(28, 51, 28, 51);                                       // storage room
+  carve(18, 14, 38, 29);                                                              // pillar hall
+  for (let z = 14; z <= 29; z++) for (let x = 18; x <= 38; x++) if ((x - 18) % 3 === 1 && (z - 14) % 3 === 1) g[z][x] = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {                           // office warren
+    carve(4 + 6 * i, 38 + 6 * j, 7 + 6 * i, 41 + 6 * j);
+    if (i < 2) carve(8 + 6 * i, 39 + 6 * j, 9 + 6 * i, 39 + 6 * j);
+    if (j < 2) carve(5 + 6 * i, 42 + 6 * j, 5 + 6 * i, 43 + 6 * j);
+  }
+  carve(40, 36, 52, 36); for (const x of [40, 43, 46, 49, 52]) carve(x, 36, x, 56);   // repeating hall comb
+  carve(42, 8, 56, 26);                                                               // big open room + obstacles
+  for (const r of [[46, 12, 48, 13], [51, 18, 52, 21], [44, 20, 45, 21], [53, 10, 54, 11], [48, 22, 49, 23]]) carve(r[0], r[1], r[2], r[3], 0);
+  carve(46, 27, 46, 35); carve(38, 20, 41, 20);
+  carve(2, 4, 50, 4); carve(2, 4, 2, 39); carve(3, 39, 3, 39); carve(24, 5, 24, 13); carve(50, 5, 50, 7); // long halls
+  carve(4, 8, 10, 13); carve(3, 10, 3, 10);                                           // paper-machine room
+  carve(54, 40, 58, 45); carve(53, 43, 53, 43, 3);                                    // vault + wooden door cell
+  carve(27, 1, 28, 2); carve(27, 3, 27, 3, 3);                                        // elevator cabin + iron door cell
+  const vents = [[28,36,-1,0,3],[28,40,1,0,3],[22,47,0,-1,3],[40,45,1,0,1],[43,52,1,0,1],[46,41,-1,0,1],[49,50,1,0,1],
+                 [14,4,0,1,3],[34,4,0,1,3],[2,20,1,0,3],[18,20,-1,0,2],[38,24,1,0,2]];
+  for (const [x, z, dx, dz, n] of vents) for (let k = 1; k <= n; k++) g[z + dz * k][x + dx * k] = 2;
+  return { g, zone };
+}
+function genQuads(L) {
+  const g = L.g, T = { wall: 2.4, floor: 2.5, ceil: 2.7 }, B = {};
+  for (const k of ['wall', 'floor', 'ceil', 'metal']) B[k] = { p: [], n: [], uv: [], i: [] };
+  const ty = (x, z) => (x < 0 || z < 0 || x >= GN || z >= GN) ? 0 : g[z][x];
+  const inR = (r, x, z) => x >= r[0] && x <= r[2] && z >= r[1] && z <= r[3];
+  const Q = (b, c, n, uv, s) => { const o = b.p.length / 3; for (let k = 0; k < 4; k++) { b.p.push(c[k][0], c[k][1], c[k][2]); b.n.push(n[0], n[1], n[2]); b.uv.push(uv[k][0] / s, uv[k][1] / s); } b.i.push(o, o + 1, o + 2, o, o + 2, o + 3); };
+  for (let z = 0; z < GN; z++) for (let x = 0; x < GN; x++) {
+    const t = ty(x, z); if (!t) continue;
+    const x0 = x * CS, x1 = x0 + CS, z0 = z * CS, z1 = z0 + CS, h = t === 2 ? VENT_H : WALL_H;
+    Q(B.floor, [[x0,0,z0],[x0,0,z1],[x1,0,z1],[x1,0,z0]], [0,1,0], [[x0,z0],[x0,z1],[x1,z1],[x1,z0]], T.floor);
+    Q(B.ceil, [[x0,h,z0],[x1,h,z0],[x1,h,z1],[x0,h,z1]], [0,-1,0], [[x0,z0],[x1,z0],[x1,z1],[x0,z1]], T.ceil);
+    const metal = t === 2 || inR(L.zone.cab, x, z);
+    for (const [dx, dz] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nt = ty(x + dx, z + dz); let ya, yb, mk;
+      if (nt === 0) { ya = 0; yb = h; mk = metal ? 'metal' : 'wall'; }
+      else if (nt === 2 && t !== 2) { ya = VENT_H; yb = WALL_H; mk = 'wall'; }   // slab front above a vent mouth
+      else continue;
+      if (dx) { const X = dx > 0 ? x1 : x0; Q(B[mk], [[X,ya,z0],[X,ya,z1],[X,yb,z1],[X,yb,z0]], [-dx,0,0], [[z0,ya],[z1,ya],[z1,yb],[z0,yb]], T.wall); }
+      else { const Z = dz > 0 ? z1 : z0; Q(B[mk], [[x0,ya,Z],[x1,ya,Z],[x1,yb,Z],[x0,yb,Z]], [0,0,-dz], [[x0,ya],[x1,ya],[x1,yb],[x0,yb]], T.wall); }
+    }
+  }
+  return B;
+}
+// ---- THREE: textures, materials, template ----
+function procTex(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+  const noise = (a, n) => { for (let i = 0; i < n; i++) { x.fillStyle = `rgba(${a},${a},${a},${Math.random() * 0.12})`; x.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); } };
+  if (kind === 'wall') { x.fillStyle = '#c9b458'; x.fillRect(0, 0, 256, 256); for (let i = 0; i < 256; i += 32) { x.fillStyle = 'rgba(140,120,40,.35)'; x.fillRect(i, 0, 10, 256); } noise(60, 4000); }
+  else if (kind === 'floor') { x.fillStyle = '#9a8a4a'; x.fillRect(0, 0, 256, 256); noise(40, 9000); noise(220, 3000); }
+  else if (kind === 'ceil') { x.fillStyle = '#c8c2a0'; x.fillRect(0, 0, 256, 256); x.strokeStyle = '#8d876c'; x.lineWidth = 4; x.strokeRect(0, 0, 256, 256); x.strokeRect(128, 0, 0, 256); x.strokeRect(0, 128, 256, 0); noise(80, 3000); }
+  else if (kind === 'metal') { x.fillStyle = '#4a4d50'; x.fillRect(0, 0, 256, 256); for (let i = 8; i < 256; i += 24) { x.fillStyle = '#1b1c1e'; x.fillRect(0, i, 256, 8); } noise(200, 2000); }
+  else { x.fillStyle = kind; x.fillRect(0, 0, 256, 256); noise(0, 3000); noise(255, 1500); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function loadTex(url, srgb) {
+  return new Promise(res => new THREE.TextureLoader().load(url, t => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; if (srgb) t.colorSpace = THREE.SRGBColorSpace; res(t);
+  }, undefined, () => res(null)));
+}
+async function pbr(dir, name, kind) { // real PBR files if present, procedural colour map otherwise
+  const [c, n, r] = await Promise.all([loadTex(`${dir}/${name}_color.png`, true), loadTex(`${dir}/${name}_normal.png`, false), loadTex(`${dir}/${name}_rough.png`, false)]);
+  const m = new THREE.MeshStandardMaterial({ map: c || procTex(kind), roughness: 1, metalness: 0, side: THREE.DoubleSide });
+  if (c && n) { m.normalMap = n; m.normalScale.set(0.8, 0.8); }
+  if (c && r) m.roughnessMap = r; else m.roughness = 0.85;
+  console.log('[TEX]', kind, c ? 'PNG textures loaded' : 'PNG missing -> procedural');
+  return m;
+}
+function colGeoFrom(B) {
+  let np = 0, ni = 0; for (const k in B) { np += B[k].p.length; ni += B[k].i.length; }
+  const P = new Float32Array(np), I = new Uint32Array(ni); let po = 0, io = 0, vo = 0;
+  for (const k in B) { const b = B[k]; P.set(b.p, po); for (let i = 0; i < b.i.length; i++) I[io + i] = b.i[i] + vo; po += b.p.length; io += b.i.length; vo += b.p.length / 3; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setIndex(new THREE.BufferAttribute(I, 1)); return g;
+}
+function boxCol(w, h, d, x, y, z) { const g = new THREE.BoxGeometry(w, h, d); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g.translate(x, y, z); return g; }
+const DOORS = { wood: { c: [53, 43], size: [0.25, WALL_H, CS] }, iron: { c: [27, 3], size: [CS, WALL_H, 0.25] } };
+const doorPos = k => new THREE.Vector3((DOORS[k].c[0] + 0.5) * CS, WALL_H / 2, (DOORS[k].c[1] + 0.5) * CS);
+
+async function buildMapTemplate() {
+  const L = makeLayout(), B = genQuads(L); await nextFrame();
+  const [wall, floor, ceil] = await Promise.all([pbr('wall-texture', 'wallpaper', 'wall'), pbr('ground-texture', 'carpet', 'floor'), pbr('ceiling-texture', 'ceiling_tiles_2', 'ceil')]);
+  const metal = new THREE.MeshStandardMaterial({ map: procTex('metal'), roughness: 0.6, metalness: 0.15, side: THREE.DoubleSide });
+  const mats = { wall, floor, ceil, metal }, chunkEntries = [];
+  for (const k in B) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(B[k].p, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(B[k].n, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(B[k].uv, 2)); g.setIndex(B[k].i); g.computeBoundingSphere();
+    chunkEntries.push({ geometry: g, material: mats[k] });
+  }
+  const staticGeo = colGeoFrom(B), doorCols = {};
+  for (const k in DOORS) { const p = doorPos(k), s = DOORS[k].size; doorCols[k] = boxCol(s[0], s[1], s[2], p.x, p.y, p.z); }
+  const bvhMesh = makeBVH([staticGeo, doorCols.wood, doorCols.iron]);
+  // ceiling light panels (every other open cell, never in vents/doors)
+  const ceilingPanels = [];
+  for (let z = 0; z < GN; z++) for (let x = 0; x < GN; x++) if (L.g[z][x] === 1 && (x + z) % 2 === 0) ceilingPanels.push(new THREE.Vector3((x + 0.5) * CS, WALL_H - 0.12, (z + 0.5) * CS));
+  const sx = 29 * CS, sz = 47.5 * CS, o = 1.2;
+  const spawnOffsets = [[-o, -o], [o, -o], [-o, o], [o, o]].map(a => ({ x: sx + a[0], y: 0, z: sz + a[1], yaw: 0 }));
+  console.log('[MAP] fixed map: open cells', ceilingPanels.length * 2, 'light panels', ceilingPanels.length);
+  return { mapScale: 1, chunkEntries, collisionGeo: bvhMesh.geometry, bvh: bvhMesh.geometry.boundsTree, bvhMesh, ceilingPanels, spawn: spawnOffsets[0], spawnOffsets, layout: L, staticGeo, doorCols };
+}
+function makeBVH(geos) {
+  const geo = BufferGeometryUtils.mergeGeometries(geos, false);
+  geo.boundsTree = new MeshBVH(geo, { lazyGeneration: false });
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })); m.raycast = acceleratedRaycast; return m;
+}
+
+// ---- OBJECTIVES: key -> wooden door -> paper -> paper machine -> button machine -> iron door/elevator -> credits ----
+const BTN = [{ n: 'blue', c: 0x2a5cff }, { n: 'red', c: 0xe02a2a }, { n: 'green', c: 0x2ac04a }, { n: 'yellow', c: 0xf2d21b }];
+let OBJ = null;
+const rng32 = s => () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const hud$ = (tag, css, parent = document.body) => { const e = document.createElement(tag); e.style.cssText = css; parent.appendChild(e); return e; };
+
+function initObjectives() {
+  const tpl = assetCache.mapTemplate, L = tpl.layout, rnd = rng32(netState.seed || 1), sp = tpl.spawn;
+  const code = [0, 1, 2, 3].map(() => Math.floor(rnd() * 4));
+  const bad = (x, z) => ['start', 'paper', 'vault', 'cab'].some(k => { const r = L.zone[k]; return x >= r[0] - 1 && x <= r[2] + 1 && z >= r[1] - 1 && z <= r[3] + 1; });
+  const cells = [], walls = [];
+  for (let z = 1; z < GN - 1; z++) for (let x = 1; x < GN - 1; x++) {
+    if (L.g[z][x] !== 1 || bad(x, z)) continue;
+    const cx = (x + 0.5) * CS, cz = (z + 0.5) * CS; if (Math.hypot(cx - sp.x, cz - sp.z) < 45) continue;
+    cells.push([cx, cz]);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (L.g[z + dz][x + dx] === 0) walls.push([cx, cz, dx, dz]);
+  }
+  const kc = cells[Math.floor(rnd() * cells.length)], key = new THREE.Vector3(kc[0] + (rnd() - 0.5) * 1.4, 0.03, kc[1] + (rnd() - 0.5) * 1.4);
+  const wc = walls[Math.floor(rnd() * walls.length)], off = (rnd() - 0.5) * 1.6;
+  const pn = new THREE.Vector3(-wc[2], 0, -wc[3]);                                     // paper faces into the room
+  const paper = new THREE.Vector3(wc[0] + wc[2] * (CS / 2 - 0.012) + (wc[3] ? off : 0), 1.0, wc[1] + wc[3] * (CS / 2 - 0.012) + (wc[2] ? off : 0));
+  OBJ = { code, st: { key: null, paper: null, door: false, inserted: false, seq: [], iron: false }, items: [], doors: {}, t0: performance.now(), ended: false, flash: 0, tChk: 0, glow: 0 };
+  if (!document.getElementById('cr-style')) { const st = document.createElement('style'); st.id = 'cr-style'; st.textContent = '@keyframes cr{from{transform:translateY(100vh)}to{transform:translateY(-100%)}}'; document.head.appendChild(st); }
+  const S = OBJ.st, grp = new THREE.Group(); scene.add(grp); OBJ.grp = grp;
+  const std = (c, r = 0.7, m = 0.1) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m });
+  // panels (emissive, instanced)
+  const pm = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.4, 0.7).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff6d6, toneMapped: false }), tpl.ceilingPanels.length);
+  tpl.ceilingPanels.forEach((p, i) => pm.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y + 0.1, p.z))); pm.frustumCulled = false; grp.add(pm);
+  // key + glowing floor circle
+  OBJ.keyG = new THREE.Group(); OBJ.keyG.position.copy(key);
+  const gold = std(0xd8b020, 0.35, 0.6);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.016, 8, 16), gold); ring.rotation.x = Math.PI / 2; ring.position.set(-0.09, 0.016, 0);
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.014, 0.014), gold); shaft.position.set(0.02, 0.008, 0);
+  const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.04), gold); tooth.position.set(0.09, 0.008, 0.02);
+  OBJ.glowM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 32).rotateX(-Math.PI / 2), OBJ.glowM); glow.position.y = 0.012;
+  OBJ.keyG.add(ring, shaft, tooth, glow); OBJ.keyG.rotation.y = rnd() * 6.28; grp.add(OBJ.keyG);
+  // paper on wall: black & white, four empty boxes
+  const pc = document.createElement('canvas'); pc.width = 128; pc.height = 176; const px = pc.getContext('2d');
+  px.fillStyle = '#f2f2f2'; px.fillRect(0, 0, 128, 176); px.strokeStyle = '#111'; px.lineWidth = 4; px.strokeRect(2, 2, 124, 172);
+  for (let i = 0; i < 4; i++) px.strokeRect(10 + i * 28, 70, 24, 24);
+  OBJ.paperM = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.385), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pc) }));
+  OBJ.paperM.position.copy(paper); OBJ.paperM.lookAt(paper.clone().add(pn)); grp.add(OBJ.paperM);
+  // paper machine (north wall of its room): screen shows code after the paper is inserted
+  const pmx = new THREE.Group(); pmx.position.set(22.5, 0, 8 * CS + 0.4); grp.add(pmx);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.5, 0.8), std(0x55595e, 0.6, 0.3)); body.position.y = 0.75; pmx.add(body);
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.05), std(0x050505)); slot.position.set(0, 0.55, 0.41); pmx.add(slot);
+  const sc = document.createElement('canvas'); sc.width = 256; sc.height = 128; OBJ.sctx = sc.getContext('2d'); OBJ.stex = new THREE.CanvasTexture(sc);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.5), new THREE.MeshBasicMaterial({ map: OBJ.stex, toneMapped: false })); scr.position.set(0, 1.0, 0.41); pmx.add(scr);
+  drawScreen();
+  // button machine (vault, east wall)
+  const bm = new THREE.Group(); bm.position.set((vaultX() ) * CS - 0.4, 0, 43 * CS); bm.rotation.y = -Math.PI / 2; grp.add(bm);
+  const bb = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 0.8), std(0x4a4e52, 0.6, 0.3)); bb.position.y = 0.75; bm.add(bb);
+  OBJ.lamps = []; OBJ.btnPos = [];
+  BTN.forEach((b, i) => {
+    const bx = (i - 1.5) * 0.3, mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.08, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: b.c, emissive: b.c, emissiveIntensity: 0.35, roughness: 0.4 }));
+    mesh.position.set(bx, 0.95, 0.43); bm.add(mesh);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshBasicMaterial({ color: 0x222222 })); lamp.position.set(bx, 1.3, 0.41); bm.add(lamp); OBJ.lamps.push(lamp);
+    OBJ.items.push({ id: 'btn' + i, pos: null, r: 0.15, maxD: 2.4, mesh, on: () => S.door && !S.iron && !OBJ.ended, use: () => sendAct('btn', { c: i }) });
+  });
+  bm.updateMatrixWorld(true); OBJ.items.filter(i => i.id.startsWith('btn')).forEach((it, i) => { it.pos = it.mesh.getWorldPosition(new THREE.Vector3()); });
+  // doors
+  for (const k of ['wood', 'iron']) {
+    const s = DOORS[k].size, m = new THREE.Mesh(new THREE.BoxGeometry(s[0], s[1], s[2]), k === 'wood' ? new THREE.MeshStandardMaterial({ map: procTex('#6b4a2b'), roughness: 0.8 }) : std(0x5d6166, 0.45, 0.6));
+    m.position.copy(doorPos(k)); grp.add(m); OBJ.doors[k] = { m, y0: m.position.y, open: 0, opening: false };
+  }
+  // interactables
+  OBJ.items.push(
+    { id: 'key', pos: key.clone().setY(0.1), r: 0.55, maxD: 1.9, on: () => !S.key, use: () => sendAct('key') },
+    { id: 'paper', pos: paper.clone().addScaledVector(pn, 0.2), r: 0.4, maxD: 2.3, on: () => !S.paper, use: () => sendAct('paper') },
+    { id: 'wood', pos: doorPos('wood').setY(1.0), r: 1.3, maxD: 3.2, on: () => !S.door, use: () => { if (S.key === netState.myId) sendAct('door'); else toast('Locked'); } },
+    { id: 'pmach', pos: new THREE.Vector3(22.5, 0.9, 8 * CS + 0.95), r: 0.6, maxD: 2.6, on: () => !S.inserted, use: () => { if (S.paper === netState.myId) sendAct('insert'); else toast('Needs a paper'); } });
+  OBJ.cabBox = [L.zone.cab[0] * CS, L.zone.cab[1] * CS, (L.zone.cab[2] + 1) * CS, (L.zone.cab[3] + 1) * CS];
+  OBJ.old = null;
+}
+const vaultX = () => 59; // east edge (in cells) of the vault room
+function drawScreen() {
+  const c = OBJ.sctx, S = OBJ.st; c.fillStyle = '#05100a'; c.fillRect(0, 0, 256, 128);
+  if (!S.inserted) { c.fillStyle = '#3f8f5a'; c.font = '20px monospace'; c.textAlign = 'center'; c.fillText('INSERT PAPER', 128, 70); }
+  else OBJ.code.forEach((v, i) => { c.fillStyle = '#' + BTN[v].c.toString(16).padStart(6, '0'); c.fillRect(20 + i * 56, 40, 44, 44); });
+  OBJ.stex.needsUpdate = true;
+}
+function toast(msg) {
+  if (!OBJ.toastEl) { OBJ.toastEl = hud$('div', 'position:fixed;left:18px;top:16px;z-index:9;color:#eee;font:15px monospace;text-shadow:0 0 4px #000;transition:opacity 1.2s;opacity:0;pointer-events:none'); }
+  const e = OBJ.toastEl; e.textContent = msg; e.style.transition = 'none'; e.style.opacity = '1';
+  clearTimeout(OBJ.toastT); OBJ.toastT = setTimeout(() => { e.style.transition = 'opacity 1.5s'; e.style.opacity = '0'; }, 1600);
+}
+function sendAct(k, extra) {
+  const m = { t: 'act', k, from: netState.myId, ...extra };
+  if (netState.isHost) hostAct(m); else sendReliable(netState.hostId, m);
+}
+function hostAct(m) { // host is the referee: first request wins (key/paper race)
+  const s = OBJ.st; let ev = null;
+  if (m.k === 'key' && !s.key) ev = { k: 'key', by: m.from };
+  else if (m.k === 'paper' && !s.paper) ev = { k: 'paper', by: m.from };
+  else if (m.k === 'door' && s.key === m.from && !s.door) ev = { k: 'door' };
+  else if (m.k === 'insert' && s.paper === m.from && !s.inserted) ev = { k: 'insert' };
+  else if (m.k === 'btn' && s.door && !s.iron) ev = { k: 'btn', c: m.c & 3 };
+  if (ev) { broadcastReliable({ t: 'ev', ev }); applyEv(ev); }
+}
+function setCollision() {
+  const tpl = assetCache.mapTemplate, S = OBJ.st, g = [tpl.staticGeo];
+  if (!S.door) g.push(tpl.doorCols.wood); if (!S.iron) g.push(tpl.doorCols.iron);
+  const m = makeBVH(g); gameState.bvh = m.geometry.boundsTree; gameState.bvhMesh = m;
+  if (OBJ.old) OBJ.old.dispose(); OBJ.old = m.geometry;
+}
+function applyEv(ev) {
+  if (!OBJ) return; const S = OBJ.st, me = netState.myId;
+  if (ev.k === 'key') { S.key = ev.by; OBJ.keyG.visible = false; if (ev.by === me) toast('Key acquired'); }
+  else if (ev.k === 'paper') { S.paper = ev.by; OBJ.paperM.visible = false; if (ev.by === me) toast('Paper acquired'); }
+  else if (ev.k === 'door') { S.door = true; OBJ.doors.wood.opening = true; setCollision(); }
+  else if (ev.k === 'insert') { S.inserted = true; drawScreen(); if (S.paper === me) toast('Paper inserted'); }
+  else if (ev.k === 'btn') {
+    S.seq.push(ev.c); OBJ.lamps.forEach((l, i) => l.material.color.setHex(i < S.seq.length ? 0xffffff : 0x222222));
+    if (S.seq.length === 4) {
+      if (S.seq.every((v, i) => v === OBJ.code[i])) { S.iron = true; OBJ.doors.iron.opening = true; setCollision(); OBJ.lamps.forEach(l => l.material.color.setHex(0x30ff60)); }
+      else { OBJ.flash = 1; S.seq = []; OBJ.lamps.forEach(l => l.material.color.setHex(0xff2020)); }
+    }
+  } else if (ev.k === 'end') startEnding(ev.ms);
+}
+function objPeerLeft(id) { // key/paper holder left -> item returns to the floor/wall
+  if (!OBJ) return; const S = OBJ.st;
+  if (S.key === id && !S.door) { S.key = null; OBJ.keyG.visible = true; }
+  if (S.paper === id && !S.inserted) { S.paper = null; OBJ.paperM.visible = true; }
+}
+function startEnding(ms) {
+  if (OBJ.ended) return; OBJ.ended = true; document.exitPointerLock();
+  const names = netState.roster.map(r => r.name), t = Math.floor(ms / 1000), mm = String(Math.floor(t / 60)).padStart(2, '0'), ss = String(t % 60).padStart(2, '0');
+  const ov = hud$('div', 'position:fixed;inset:0;z-index:9000;background:#000;opacity:0;transition:opacity 3s;overflow:hidden;color:#ddd;font-family:Georgia,serif;text-align:center');
+  requestAnimationFrame(() => ov.style.opacity = '1');
+  setTimeout(() => {
+    const sec = (h, b) => `<div style="margin:0 0 70px"><div style="color:#c9b458;letter-spacing:.3em;font-size:14px;margin-bottom:14px">${h}</div><div style="font-size:24px;line-height:1.6">${b}</div></div>`;
+    const roll = hud$('div', 'position:absolute;left:0;right:0;top:0;padding-top:20px;animation:cr 48s linear forwards', ov);
+    roll.innerHTML = `<div style="font-size:64px;letter-spacing:.25em;margin:0 0 90px">BACKROOMS</div>` + sec('ESCAPED', names.join('<br>')) + sec('TIME', `${mm}:${ss}`) + sec('CREATED BY', 'Placeholder') + sec('TECH STACK', 'Three.js · three-mesh-bvh<br>WebRTC (PeerJS) · Web Audio API<br>Vanilla JavaScript') + sec('', 'Thank you for playing') + '<div style="height:60vh"></div>';
+    roll.addEventListener('animationend', () => { const b = hud$('button', 'position:absolute;left:50%;bottom:12vh;transform:translateX(-50%);padding:12px 26px;font-size:18px;cursor:pointer;background:#111;color:#ddd;border:1px solid #c9b458', ov); b.textContent = 'Main menu'; b.onclick = () => { ov.remove(); leaveGameAndReturnToMenu(); }; });
+  }, 3200);
+}
+const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _rc = new THREE.Raycaster();
+function updateObjectives(dt) {
+  if (!OBJ) return; const S = OBJ.st;
+  OBJ.glow += dt; OBJ.glowM.opacity = 0.35 + 0.25 * Math.sin(OBJ.glow * 3); if (OBJ.keyG.visible) OBJ.keyG.children[0].rotation.z += dt;
+  for (const k in OBJ.doors) { const d = OBJ.doors[k]; if (d.opening && d.open < 1) { d.open = Math.min(1, d.open + dt / 1.6); d.m.position.y = d.y0 + d.open * (WALL_H + 0.1); if (d.open >= 1) d.m.visible = false; } }
+  if (OBJ.flash > 0) { OBJ.flash -= dt; if (OBJ.flash <= 0) OBJ.lamps.forEach(l => l.material.color.setHex(0x222222)); }
+  // aim hint ("E") for the nearest interactable the crosshair points at
+  OBJ.aim = null; camera.getWorldDirection(_d); let bt = 1e9;
+  for (const it of OBJ.items) {
+    if (!it.on()) continue; _v.copy(it.pos).sub(camera.position); const t = _v.dot(_d); if (t < 0.15 || t > it.maxD || t >= bt) continue;
+    if (_v.addScaledVector(_d, -t).length() < it.r) { OBJ.aim = it; bt = t; }
+  }
+  if (OBJ.aim && gameState.bvhMesh) { _rc.set(camera.position, _v.copy(OBJ.aim.pos).sub(camera.position).normalize()); _rc.far = camera.position.distanceTo(OBJ.aim.pos) - 0.25; if (_rc.intersectObject(gameState.bvhMesh, false).length) OBJ.aim = null; }
+  if (!OBJ.hint) OBJ.hint = hud$('div', 'position:fixed;left:50%;top:56%;transform:translateX(-50%);z-index:9;color:#fff;font:bold 14px monospace;border:1px solid #fff9;border-radius:4px;padding:2px 8px;text-shadow:0 0 4px #000;pointer-events:none;display:none');
+  OBJ.hint.textContent = 'E'; OBJ.hint.style.display = OBJ.aim && !OBJ.ended ? 'block' : 'none';
+  // host: when every player stands inside the elevator after the iron door opened -> ending
+  OBJ.tChk -= dt;
+  if (netState.isHost && S.iron && !OBJ.ended && OBJ.tChk <= 0) {
+    OBJ.tChk = 0.25; const b = OBJ.cabBox, inside = p => p.x > b[0] && p.x < b[2] && p.z > b[1] && p.z < b[3];
+    if (inside(player) && remotePlayers.size + 1 === netState.roster.length && [...remotePlayers.values()].every(r => inside(r.rig.group.position))) {
+      const ev = { k: 'end', ms: performance.now() - OBJ.t0 }; broadcastReliable({ t: 'ev', ev }); applyEv(ev);
+    }
+  }
+}
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyE' || e.repeat || !OBJ || !gameState.inGame || chatFocused || OBJ.ended) return;
+  if (netState.hostPaused || netState.hostLeavingTriggered || document.pointerLockElement !== canvas) return;
+  if (OBJ.aim) OBJ.aim.use();
+});
+
+
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
@@ -3516,6 +3575,7 @@ renderer.setAnimationLoop(() => {
       stepLocalPlayer(dt);
       updateRemotePlayers(dt);
       updateCeilingLightPool(dt);
+      updateObjectives(dt);
       vhsMaterial.uniforms.uTime.value += dt;
     }
     renderer.setRenderTarget(vhsTarget);
